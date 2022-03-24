@@ -29,7 +29,7 @@ where
 
             let q = lerp(q4, q5, t);
 
-            *img.get_pixel_mut((200.0 + q.x) as u32, (200.0 + q.y) as u32) =
+            *img.get_pixel_mut((200.0 + q.x) as u32, (250.0 + q.y) as u32) =
                 image::Rgb([255 as u8, 255, 255]);
         }
     }

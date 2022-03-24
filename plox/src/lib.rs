@@ -79,7 +79,7 @@ pub fn load() -> Spline {
     let bytes = include_bytes!("../res/lm/latinmodern-math.otf");
     let face = rustybuzz::Face::from_slice(bytes, 0).unwrap();
     let mut buf = rustybuzz::UnicodeBuffer::new();
-    buf.push_str("\u{03C8}");
+    buf.push_str("\u{03BE}");
 
     let glyph_buffer = rustybuzz::shape(&face, &[], buf);
     dbg!(&glyph_buffer);
