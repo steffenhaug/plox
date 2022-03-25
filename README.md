@@ -1,4 +1,5 @@
-gpu-accelerated plotting.
+# gpu-accelerated plotting.
+(plox = plot + oxidize or some shit)
 
 
 ## notes on text rendering
@@ -42,7 +43,11 @@ https://simoncozens.github.io/fonts-and-layout/opentype.html
 MATH symbols unicode table
 https://unicode-search.net/unicode-namesearch.pl?term=MATHEMATICAL
 
-FontForge
+FontForge to inspect curve data
+
+https://pomax.github.io/bezierinfo/
+
+https://www.youtube.com/watch?v=N-KXStupwsc   MATHOLOGER CUBIC
 
 
 ## rust-libraries

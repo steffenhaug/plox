@@ -1,14 +1,5 @@
 use image::ImageBuffer;
-use plox::{Cubic, Point, Spline};
-
-fn lerp(p1: Point, p2: Point, t: f32) -> Point {
-    let lerp_x = (1.0 - t) * p1.x + t * p2.x;
-    let lerp_y = (1.0 - t) * p1.y + t * p2.y;
-    Point {
-        x: lerp_x,
-        y: lerp_y,
-    }
-}
+use plox::{spline, Cubic, Point, Spline};
 
 fn raster<C>(img: &mut ImageBuffer<image::Rgb<u8>, C>, spline: &Spline)
 where
@@ -20,14 +11,14 @@ where
         for i in 0..n {
             let t = (i as f32) / (n as f32);
             // De Casteljau's Algorithm
-            let q1 = lerp(*p1, *p2, t);
-            let q2 = lerp(*p2, *p3, t);
-            let q3 = lerp(*p3, *p4, t);
+            let q1 = spline::lerp(*p1, *p2, t);
+            let q2 = spline::lerp(*p2, *p3, t);
+            let q3 = spline::lerp(*p3, *p4, t);
 
-            let q4 = lerp(q1, q2, t);
-            let q5 = lerp(q2, q3, t);
+            let q4 = spline::lerp(q1, q2, t);
+            let q5 = spline::lerp(q2, q3, t);
 
-            let q = lerp(q4, q5, t);
+            let q = spline::lerp(q4, q5, t);
 
             *img.get_pixel_mut((200.0 + q.x) as u32, (250.0 + q.y) as u32) =
                 image::Rgb([255 as u8, 255, 255]);
