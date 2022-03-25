@@ -47,7 +47,17 @@ B(t) &=  P_0 \\
      &+ (-P_0 + 3 P_1 - 3 P_2 + P_3) t^3
 \end{align*}
 
-recalling that $P_1 \dots P_3$ are just 2D points that we are interpolating between, the $y$-coordinate of the interpolated point can be obtained simply by interpolating between $y_1 \dots y_3$. (If this is unclear, think of a point $P$ as a linear combination of its $x$- and $y$-component, and remember that scaling and adding preserves linear combinations, which is all linear interpolation really does).
+## Solving the cubic
+Solutions cubic equations like $B(t) = 0$ has an explicit formula, akin to the famous quadratic formula,
+just a little bit hairier. I will provide an explanation of how to get $B(t)$ in a standardized
+form to apply the formula, because it is a central part of the fragment shader, but the details
+are really not super important: The important thing is that the _is a way_ to find the roots
+in constant time with a reasonable number of floating point operations, so feel free to gloss
+over. Sometimes I introduce will introduce things without proof or motivation to save typing.
+A very nicely motivated explanation of this formula is given in
+[this highly entertaining YouTube video](https://www.youtube.com/watch?v=N-KXStupwsc).
+
+Recalling that $P_1 \dots P_3$ are just 2D points that we are interpolating between, the $y$-coordinate of the interpolated point can be obtained simply by interpolating between $y_1 \dots y_3$. (If this is unclear, think of a point $P$ as a linear combination of its $x$- and $y$-component, and remember that scaling and adding preserves linear combinations, which is all linear interpolation really does).
 Making the substitutions
 $c = y_0$,
 $b = - 3 y_0 + 3 y_1$,
@@ -67,3 +77,70 @@ B_y(t) &=  t^3 + a t^2 + b t + c \\
 \frac {dB_y} {dt} &=
     3 t^2 + 2a t + b
 \end{align}
+
+Next, we introduce a standard coordinate shift
+$$
+t = s - \frac a 3 \implies B(s) = s^3 + ps + q
+$$
+where
+$$
+p = \frac {3 b - a^2} 3 \quad \text{and} \quad q = \frac {2a^3 - 9ab + 27c} {27}
+$$
+and solutions to _this_ polynomial (almost) has a neat explicit formula. The discriminant
+$$
+\Delta = \left(
+    \frac q 2
+\right)^2
++ \left(
+    \frac p 3
+\right)^3
+$$
+tells which of a few special cases we have:
+$\Delta < 0 \implies \text{three real solutions}$,
+$\Delta = 0 \implies \text{two real solutions}$, and
+$\Delta > 0 \implies \text{one real solution}$.
+The $\Delta \geq 0$ cases are simple: The formula for the solution $s$ can be expressed using $\sqrt \Delta$:
+\begin{equation}
+u = \sqrt[3]{
+- \frac q 2 - \sqrt \Delta
+}
+\quad\text{and}\quad
+v = \sqrt[3]{
+- \frac q 2 + \sqrt \Delta
+}
+\end{equation}
+and the solutions are
+\begin{equation}
+s_1 = u + v
+\quad\text{and}\quad
+s_{2,3} = - \frac 1 2 (u + v) \pm (u - v) \frac {\sqrt 3} 2 i
+\end{equation}
+To see how this gives one and two real solutions, notice that in the $\sqrt \Delta = 0$ case,
+$u = v \implies u - v = 0$, so one of the complex solutions "becomes" real, thus giving us another.
+
+
+However, in the $\Delta < 0$ case (in which, remember, we have three _real_ solutions), $\sqrt \Delta$
+will always be a _complex_ number. In fact, all three solutions are actually sums of _complex
+conjugates_! Our formula still technically gives correct answers, but it is _annoying_ do do in a shader
+because representing $u$ and $v$ as complex numbers requires implementing the basic arithmetic
+ourselves. We can circumvent the complex arithmetic entirely by writing the solution in polar
+coordinates:
+
+$$
+r = \sqrt { \left(
+- \frac  p 3
+\right) ^3}
+\quad \text{and} \quad
+\varphi = \mathrm{atan2} \left(
+\sqrt {-\Delta}, - \frac q 2
+\right)
+$$
+
+In which case our solutions are
+\begin{align*}
+s_0 &= 2 \sqrt[3] r \cos \frac {\varphi} 3 \\
+s_1 &= 2 \sqrt[3] r \cos \frac {\varphi + 2 \pi} 3 \\
+s_2 &= 2 \sqrt[3] r \cos \frac {\varphi + 4 \pi} 3
+\end{align*}
+and to get our solution back in terms of $t$, simply apply the coordinate shift $t = s - a / 3$
+again.
