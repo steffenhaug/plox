@@ -14,6 +14,14 @@ pub struct Point {
     pub y: f32,
 }
 
+impl Point {
+    pub fn d(&self, p: Point) -> f32 {
+        let dx = f32::abs(p.x - self.x);
+        let dy = f32::abs(p.y - self.y);
+        f32::sqrt(dx.powi(2) + dy.powi(2))
+    }
+}
+
 /// Polynomial of degree N over the set f32.
 #[derive(Debug)]
 pub struct Poly<const N: usize>(pub [f32; N]);
@@ -133,7 +141,7 @@ impl Spline {
             // Get only the solutions that actually correspond to lines on the
             // Bézier curve. Strict inequality is crucial, or there will be a
             // interval where a ray could hit two connecting curves.
-            .filter(|(t, _, _)| *t > 0.0 && *t < 1.0)
+            .filter(|(t, _, _)| *t >= 0.0 && *t < 1.0)
             // Calculate the contribution to the winding number:
             // If dB_y/dt is positive, curve is going upwards, i. e. we
             // are _leaving_ the set contained in the boundary.
@@ -230,7 +238,9 @@ impl ttf_parser::OutlineBuilder for Builder {
         // If we are moving after drawing a boundary, loop back to the start.
         // This ensures we have a closed loop.
         if let Some(start) = self.start {
-            self.line_to(start.x, start.y);
+            if !approx(0.0, Point::d(&start, self.position)) {
+                self.line_to(start.x, start.y);
+            }
         }
 
         // Go to the requested position.
@@ -272,7 +282,9 @@ impl ttf_parser::OutlineBuilder for Builder {
         // omitting the line back to the start point if it is a simple straight
         // line.
         if let Some(start) = self.start {
-            self.line_to(start.x, start.y);
+            if !approx(0.0, Point::d(&start, self.position)) {
+                self.line_to(start.x, start.y);
+            }
         }
     }
 }
