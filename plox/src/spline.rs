@@ -14,11 +14,35 @@ pub struct Point {
     pub y: f32,
 }
 
-/// A cubic Bézier curve consists of four control points.
+/// Polynomial of degree N over the set f32.
 #[derive(Debug)]
+pub struct Poly<const N: usize>(pub [f32; N]);
+
+impl<const N: usize> Poly<N> {
+    pub fn at(&self, t: f32) -> f32 {
+        self.0
+            .iter()
+            // Enumerate the coefficients.
+            .enumerate()
+            // This is why they are stored in "reverse" order.
+            .map(|(pow, coeff)| coeff * t.powi(pow as i32))
+            .sum()
+    }
+}
+
+impl Poly<4> {
+    fn solve(&self) -> Vec<f32> {
+        let coeffs = self.0;
+        solve_cubic(coeffs[0], coeffs[1], coeffs[2], coeffs[3])
+    }
+}
+
+/// A cubic Bézier curve consists of four control points.
+#[derive(Debug, Clone, Copy)]
 pub struct Cubic(pub Point, pub Point, pub Point, pub Point);
 
 impl Cubic {
+    /// Evaluates the Bézier curve at a point t.
     pub fn at(&self, t: f32) -> Point {
         let q1 = lerp(self.0, self.1, t);
         let q2 = lerp(self.1, self.2, t);
@@ -28,6 +52,47 @@ impl Cubic {
         let q5 = lerp(q2, q3, t);
 
         lerp(q4, q5, t)
+    }
+
+    /// Get the Bézier curve translated by some vector (dx, dy).
+    /// Affine transformations on Bézier curves can be applied to
+    /// the control points.
+    pub fn translate(&self, dx: f32, dy: f32) -> Cubic {
+        Cubic(
+            Point {
+                x: self.0.x + dx,
+                y: self.0.y + dy,
+            },
+            Point {
+                x: self.1.x + dx,
+                y: self.1.y + dy,
+            },
+            Point {
+                x: self.2.x + dx,
+                y: self.2.y + dy,
+            },
+            Point {
+                x: self.3.x + dx,
+                y: self.3.y + dy,
+            },
+        )
+    }
+
+    /// Returns the polynomial B_y(t) of degree 4.
+    pub fn y(&self) -> Poly<4> {
+        let c =  1.0 * self.0.y;
+        let b = -3.0 * self.0.y + 3.0 * self.1.y;
+        let a =  3.0 * self.0.y - 6.0 * self.1.y + 3.0 * self.2.y;
+        let d = -1.0 * self.0.y + 3.0 * self.1.y - 3.0 * self.2.y + 1.0 * self.3.y;
+        Poly([c, b, a, d])
+    }
+
+    /// Returns the polynomial dB_y/dt of degree 3.
+    pub fn dy(&self) -> Poly<3> {
+        let b = -3.0 * self.0.y + 3.0 * self.1.y;
+        let a =  3.0 * self.0.y - 6.0 * self.1.y + 3.0 * self.2.y;
+        let d = -1.0 * self.0.y + 3.0 * self.1.y - 3.0 * self.2.y + 1.0 * self.3.y;
+        Poly([b, 2.0 * a, 3.0 * d])
     }
 }
 
@@ -52,7 +117,36 @@ impl Spline {
     }
 
     pub fn winding_number(&self, p: Point) -> i32 {
-        unimplemented!()
+        // Zero-cost madness!
+        self.strokes()
+            // Shift the stroke so p.y = 0
+            .map(|bez| bez.translate(0.0, -p.y))
+            // Get the B_y(t) polynomials solution.
+            // Note: We keep the Bézier curve around to evaluate the solution.
+            .map(|bez| (bez.y().solve(), bez))
+            // Transpose from ([sol ...], bez) to [(sol, bez) ...]
+            .flat_map(|(solns, bez)| solns.into_iter().zip(std::iter::repeat(bez)))
+            // Evaluate the solution:
+            .map(|(sol, bez)| (sol, bez.at(sol), bez.dy()))
+            // Get only the solutions to the right of p.
+            .filter(|(_, sol_p, _)| sol_p.x > p.x)
+            // Get only the solutions that actually correspond to lines on the
+            // Bézier curve. Strict inequality is crucial, or there will be a
+            // interval where a ray could hit two connecting curves.
+            .filter(|(t, _, _)| *t > 0.0 && *t < 1.0)
+            // Calculate the contribution to the winding number:
+            // If dB_y/dt is positive, curve is going upwards, i. e. we
+            // are _leaving_ the set contained in the boundary.
+            .map(|(t, _, dy)| {
+                if approx(0.0, dy.at(t)) {
+                    0
+                } else if dy.at(t) > 0.0 {
+                    -1
+                } else {
+                    1
+                }
+            })
+            .sum()
     }
 }
 
@@ -63,13 +157,8 @@ pub fn lerp(p: Point, q: Point, t: f32) -> Point {
     Point { x, y }
 }
 
-/// Solve P(x) = 0 for some polynomial P = k3 x^3 + k2 x^2 + k1 x + k0.
-pub fn solve(k0: f32, k1: f32, k2: f32, k3: f32) -> Vec<f32> {
-    let c = k0;
-    let b = -3.0 * k0 + 3.0 * k1;
-    let a = 3.0 * k0 - 6.0 * k1 + 3.0 * k2;
-    let d = -k0 + 3.0 * k1 - 3.0 * k2 + k3;
-
+/// Solve P(x) = 0 for some polynomial P = dx³ + ax² + bx + c.
+pub fn solve_cubic(c: f32, b: f32, a: f32, d: f32) -> Vec<f32> {
     if approx(0.0, d) {
         // Quadratic solution.
         //
@@ -85,7 +174,7 @@ pub fn solve(k0: f32, k1: f32, k2: f32, k3: f32) -> Vec<f32> {
 
     // Cubic solution is required.
 
-    // Calculate the depressed cubic P(s) = x^3 + px + q.
+    // Calculate the depressed cubic P(s) = x³ + px + q.
     let c = c / d;
     let b = b / d;
     let a = a / d;
@@ -96,35 +185,31 @@ pub fn solve(k0: f32, k1: f32, k2: f32, k3: f32) -> Vec<f32> {
     // Discriminant Δ.
     let delta = (q).powi(2) / 4.0 + p.powi(3) / 27.0;
 
-    if delta < 0.0 {
-        let r = f32::sqrt(-p.powi(3) / 27.0);
-        let phi = f32::atan2(-delta.sqrt(), -q / 2.0);
-
-        // Three real solutions.
-        return vec![
-            2.0 * r.cbrt() * f32::cos(phi / 3.0),
-            2.0 * r.cbrt() * f32::cos((phi + 2.0 * PI) / 3.0),
-            2.0 * r.cbrt() * f32::cos((phi + 4.0 * PI) / 3.0),
-        ];
-    }
-
     if delta == 0.0 {
+        // Δ = 0 => Two real solutions.
         let u = -(q / 2.0).cbrt();
         let v = -(q / 2.0).cbrt();
-
-        // Two real solutions.
         return vec![u + v - a / 3.0, -0.5 * (u + v) - a / 3.0];
     }
 
     if delta > 0.0 {
+        // Δ > 0 => One real solution.
         let u = (-(q / 2.0) + delta.sqrt()).cbrt();
         let v = (-(q / 2.0) - delta.sqrt()).cbrt();
-
-        // One real solution.
         return vec![u + v - a / 3.0];
     }
 
-    unreachable!()
+    // Δ < 0 => Three real solutions!
+    let r = f32::sqrt(-p.powi(3) / 27.0);
+    let phi = f32::atan2(f32::sqrt(-delta), -q / 2.0);
+
+    // i think i can do this without resorting to trig.
+
+    return vec![
+        2.0 * r.cbrt() * f32::cos(phi / 3.0) - a / 3.0,
+        2.0 * r.cbrt() * f32::cos((phi + 2.0 * PI) / 3.0) - a / 3.0,
+        2.0 * r.cbrt() * f32::cos((phi + 4.0 * PI) / 3.0) - a / 3.0,
+    ];
 }
 
 pub(crate) struct Builder {
@@ -189,5 +274,17 @@ impl ttf_parser::OutlineBuilder for Builder {
         if let Some(start) = self.start {
             self.line_to(start.x, start.y);
         }
+    }
+}
+
+impl<const N: usize> std::fmt::Display for Poly<N> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        for (pow, coef) in self.0.iter().enumerate() {
+            if pow != 0 {
+                write!(f, " + ")?;
+            }
+            write!(f, "{}x^{}", coef, pow)?;
+        }
+        Ok(())
     }
 }
