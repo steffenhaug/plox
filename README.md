@@ -34,11 +34,14 @@ there are essentially two options:
 https://medium.com/@evanwallace/easy-scalable-text-rendering-on-the-gpu-c3f4d782c5ac - winding nuymber / bezier curves
 https://github.com/rougier/freetype-gl - distance fields
 https://www.youtube.com/watch?v=aVwxzDHniEw&t=1282s freya bezier curves
-https://jcgt.org/published/0006/02/02/paper.pdf
+https://jcgt.org/published/0006/02/02/paper.pdf <- this one is great
 https://pcwalton.github.io/2017/02/14/pathfinder
 https://medium.com/@raphlinus/inside-the-fastest-font-renderer-in-the-world-75ae5270c445
 https://www.microsoft.com/en-us/research/wp-content/uploads/2005/01/p1000-loop.pdf
 https://simoncozens.github.io/fonts-and-layout/opentype.html
+
+curve preprocessing:
+https://www.sirver.net/blog/2011/08/23/degree-reduction-of-bezier-curves/
 
 MATH symbols unicode table
 https://unicode-search.net/unicode-namesearch.pl?term=MATHEMATICAL

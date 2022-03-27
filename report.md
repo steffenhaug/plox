@@ -5,6 +5,7 @@ colorlinks: true
 links-as-notes: true
 header-includes:
 - \usepackage{mathtools}
+- \usepackage{xcolor}
 - \interfootnotelinepenalty=10000
 classoption:
 - twocolumn
@@ -197,7 +198,139 @@ net negative winding number indicated.](report/alpha_diff_outline.png)
 
 To summarize, we can rasterize a region $\Omega$ outlined by a spline
 $(B(t))_{i=0}^n$ in $O(n)$ time where $n$ is the number of Bézier curves in the spline.
-The spline is not restricted to be just one glyph! We can just add the curves corresponding
-to other glyphs (at the corect offsets) in the same buffer, but since every fragment has 
-to check solutions against every curve, there might still be a performance benefit to breaking
-strings into separate draw calls, although at the expense of more state transitions.
+That sounds fantastic, and it almost is! But there is a big prpblem:
+The calculation outlined suffers badly from numerical precision!
+Particularily where Bézier curves are joined in points that are tangent to the
+ray.
+
+![Horizontal artefacts as a result of problems related to numberical precision. Yikes!](report/problems.png)
+
+Since this artefacting stems from numerical imprecision, it is extremely
+sensitive to translation of the glyphs. In fact, the position of the nice-looking $\alpha$ was _very_ carefully
+selected so as to not have any visible artefacts. In other words, while mathematically correct,
+this technique is not _quite_ feasible. Thankfully, it is not that hard to salvage.
+[a paper by Eric Lengyel](https://jcgt.org/published/0006/02/02/paper.pdf) describes
+an incredibly elegant lookup-table based way to compute the winding number.
+This approach requires restricting our curves to quadratics after all.
+Perhaps delving into all these calculations was a waste of time, but i think outlining
+the problems of this approach in detail is valuable. I also think it is important to document
+the things I have learned that _didn't_ make it into the final implementation.
+Anyways, our next task is splitting cubic spline segmments into quadratics.
+This is outlined for the general case in
+[an online article](https://www.sirver.net/blog/2011/08/23/degree-reduction-of-bezier-curves/),
+but we have it easy since we have a specific order in mind.
+
+
+## Degree reduction of Bézier curves
+In the general case, the matrix $\mathrm M$ that lifts a Bézier curve from
+degree $n-1$ to degree $n$ is $n + 1 \times n$. Think about it: We want to apply
+the matrix to $n$ control points and get $n + 1$ control points.
+If we were to raise quadratic curves ($n-1=2$) we would need a $4 \times 3$ matrix.
+$$
+\renewcommand\arraystretch{1.3}
+\mathrm M = \begin{pmatrix}
+1         &           &            \\
+\frac 1 3 & \frac 2 3 &            \\
+          & \frac 2 3 & \frac 1 3  \\
+          &           &         1  \\
+\end{pmatrix}
+$$
+We make use, without proof, of the fact that
+\begin{equation}
+B_{n-1} = (\mathrm M ^T \mathrm M)^{-1} \mathrm M ^T B_{n}
+\end{equation}
+but note that since the dimensions are given, the product can be pre-computed:
+$$
+\mathrm M' \coloneqq \frac 1 {20} \begin{pmatrix}
+19 & 3 & -3 & 1 \\
+-5 & 15 & 15 & -5 \\
+1 & -3 & 3 & 19
+\end{pmatrix}
+$$
+and
+\begin{equation}
+\mathrm M' \begin{pmatrix}
+P_0 \\ P_1 \\ P_2 \\ P_3
+\end{pmatrix}
+= \frac 1 {20} \begin{pmatrix}
+19 P_0 +  3 P_1 -  3 P_2 +    P_3 \\
+-5 P_0 + 15 P_1 + 15 P_2 -  5 P_3 \\
+   P_0 -  3 P_1 +  3 P_2 + 19 P_3
+\end{pmatrix}
+\end{equation}
+Not exactly pretty! But how does it perform?
+
+![The \LaTeX-characters $\alpha \rightarrow \vartheta$ approximated with quadratic Bézier curves.](report/awful.png)
+
+It is _awful_! :-) Even though it is a "good" approximation, this strategy even moves the
+end-points.
+Now, there are better ways to do this, by for example splitting the high-order curve into low-order
+curves and calculating a low-order curve based on points on the line, for example at
+$t=0,t=0.5,t=1$, but that sounds like an awful amount of work when `.ttf` versions of the font is
+easy to generate with something like FontForge. Now, I wrote earlier that i wanted to use
+`.otf` fonts as a possibility so we can be maximally flexible with the users choice of fonts, but
+that sounds like a problem for future me!
+
+![The \LaTeX-characters $\alpha \rightarrow \vartheta$ approximated using
+FontForge.](report/ttf_sample.png)
+
+With fonts converted with FontForge the result is indistinguishable from the higher order.
+In fact, lower-order approximations can be done to arbitrary precision, FontForge has just inserted
+way more curves!
+
+## Bézier curve equivalence classes
+I think outlining how this winding number calculation works is worth a section, even though all the math is
+a lot simpler compared to the cubic case I just described, and the LUT is just implemented verbatim
+from the referenced article. The LUT solution is so _mindbogglingly clever_ that I can't help
+myself.
+
+First of all, the Bernstein polynomial representation of a quadratic Bézier curve is
+$$
+\arraycolsep=0.1em
+B(t) = 
+\begin{array}{cllll}
+  & P_0 &   & (1 - t)^2 &  \\
+      + & P_1 & 2 & (1 - t)   & t  \\
+      + & P_2 &   & (1 - t)   & t^2  \\
+\end{array}
+= \begin{array}{cll}
+    &     P_0                &   \\
+  + & (-2 P_0 + 2 P_1)       & t \\
+  + & (   P_0 - 2 P_1 + P_2) & t^2
+\end{array}
+$$
+which clearly means that given
+$a \coloneqq P_0 - 2P_1 + P_2$,
+$b \coloneqq -2 P_0 + 2 P_1$, and
+$c \coloneqq P_0$,
+\begin{equation}
+t_{1,2} = \frac {-b \pm \sqrt {b^2 - 4ac}} {2a}
+\end{equation}
+The winding number is then calculated in the same way:
+Given a point P, imagine a ray in (for example) positive $x$-direction,
+find all the intersections, categorize them based on whether we are entering or leaving $\Omega$,
+and sum up. But instead of doing the error-prone numerical categorization, there is a genius 
+trick we can employ to categorize the solutions. If we calculate `jmp` as follows:
+```Rust
+// Calculate the jump:
+let jmp = if y0 > 0.0 { 8 } else { 0 }
+        + if y1 > 0.0 { 4 } else { 0 }
+        + if y2 > 0.0 { 2 } else { 0 };
+```
+Notice that for any distinct combination of point configurations (configuration, in this context,
+meaning whether a point is "above" the ray or not  -- i.e. whether $y > 0$), `jmp` will take
+distinct values from $\{ 0, 2, 4, 6, \dots, 14\}$. For example, if $P_0, P_1$ is above,
+and $P_2$ is below the ray, `jmp = 12`. The LUT is implemented as follows:
+```
+let class = 0x2E74 >> jmp;
+```
+Yes -- it's that simple.
+The table is organized such that after shifting the binary number $\color{orange}10 \color{blue}11 \color{orange}10 \color{blue}01 \color{orange}11 \color{blue}01 \color{orange}00$,
+the _lowest two bits_ tells us how to interpret our two solutions $t_1$ and $t_2$.
+In other words, it defines _equivalence classes_ of Bézier curves based on the layout of their 
+control points, and a Bézier curves equivalence class determines if a solution should count
+towards the winding number.
+
+![Victory!](report/victory.png)
+
+Now, armed with an algorithm that doesn't suck, we are ready to take on the GPU.
