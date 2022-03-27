@@ -281,7 +281,7 @@ way more curves!
 ## Bézier curve equivalence classes
 I think outlining how this winding number calculation works is worth a section, even though all the math is
 a lot simpler compared to the cubic case I just described, and the LUT is just implemented verbatim
-from the referenced article. The LUT solution is so _mindbogglingly clever_ that I can't help
+from the referenced article. The LUT solution is so _mind-bogglingly clever_ that I can't help
 myself.
 
 First of all, the Bernstein polynomial representation of a quadratic Bézier curve is

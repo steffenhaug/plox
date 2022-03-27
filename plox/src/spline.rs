@@ -1,12 +1,8 @@
 //! Bezier splines
 //!
-use std::f32::consts::PI;
-
-/// Check if two numbers a,b are approximately equal.
-/// "Apprixmately" has a _very_ liberal definition in this case.
-fn approx(a: f32, b: f32) -> bool {
-    (a - b).abs() < 1e-4
-}
+use crate::approx;
+use crate::polynomial::Poly;
+use std::ops;
 
 /// A (control) point on a Bézier curve.
 #[derive(Debug, Clone, Copy)]
@@ -15,47 +11,46 @@ pub struct Point {
     pub y: f32,
 }
 
-impl Point {
-    pub fn d(&self, p: Point) -> f32 {
-        let dx = f32::abs(p.x - self.x);
-        let dy = f32::abs(p.y - self.y);
-        f32::sqrt(dx.powi(2) + dy.powi(2))
-    }
-}
-
-/// Polynomial of degree N over the set f32.
-#[derive(Debug)]
-pub struct Poly<const N: usize>(pub [f32; N]);
-
-impl<const N: usize> Poly<N> {
-    pub fn at(&self, t: f32) -> f32 {
-        self.0
-            .iter()
-            // Enumerate the coefficients.
-            .enumerate()
-            // This is why they are stored in "reverse" order.
-            .map(|(pow, coeff)| coeff * t.powi(pow as i32))
-            .sum()
-    }
-}
-
-impl Poly<4> {
-    pub fn solve(&self) -> Vec<f32> {
-        let coeffs = self.0;
-        solve_cubic(coeffs[0], coeffs[1], coeffs[2], coeffs[3])
-    }
-}
-
-impl Poly<3> {
-    pub fn solve(&self) -> (f32, f32) {
-        let coeffs = self.0;
-        solve_quadratic(coeffs[0], coeffs[1], coeffs[2])
-    }
-}
+/// A quadratic Bézier curve consists of three control points.
+#[derive(Debug, Clone, Copy)]
+pub struct Quadratic(pub Point, pub Point, pub Point);
 
 /// A cubic Bézier curve consists of four control points.
 #[derive(Debug, Clone, Copy)]
 pub struct Cubic(pub Point, pub Point, pub Point, pub Point);
+
+/// A quadratic spline is a sequence of quadratic Bézier curves.
+/// If this is used as the contour of some set, it should be a full
+/// loop, i. e. do not omit the last line back to the start point even
+/// if it is a straight line (Some .otf fonts do this).
+#[derive(Debug)]
+pub struct Spline(Vec<Quadratic>);
+
+impl Quadratic {
+    /// Evaluates the Bézier curve at a point t.
+    pub fn at(&self, t: f32) -> Point {
+        let q1 = lerp(self.0, self.1, t);
+        let q2 = lerp(self.1, self.2, t);
+        lerp(q1, q2, t)
+    }
+
+    /// Returns the polynomial B_y(t) of degree 4.
+    pub fn y(&self) -> Poly<3> {
+        let c = 1.0 * self.0.y;
+        let b = -2.0 * self.0.y + 2.0 * self.1.y;
+        let a = 1.0 * self.0.y - 2.0 * self.1.y + 1.0 * self.2.y;
+        // ax² + bx + c
+        Poly([c, b, a])
+    }
+
+    /// Returns the polynomial dB_y/dt of degree 3.
+    pub fn dy(&self) -> Poly<2> {
+        let b = -2.0 * self.0.y + 2.0 * self.1.y;
+        let a = 1.0 * self.0.y - 2.0 * self.1.y + 1.0 * self.2.y;
+        // d/dx ax² + bx + c = 2ax + b
+        Poly([b, 2.0 * a])
+    }
+}
 
 impl Cubic {
     /// Evaluates the Bézier curve at a point t.
@@ -100,51 +95,6 @@ impl Cubic {
         Quadratic(p0, p1, p2)
     }
 
-    /// Get the Bézier curve translated by some vector (dx, dy).
-    /// Affine transformations on Bézier curves can be applied to
-    /// the control points.
-    pub fn translate(&self, dx: f32, dy: f32) -> Cubic {
-        Cubic(
-            Point {
-                x: self.0.x + dx,
-                y: self.0.y + dy,
-            },
-            Point {
-                x: self.1.x + dx,
-                y: self.1.y + dy,
-            },
-            Point {
-                x: self.2.x + dx,
-                y: self.2.y + dy,
-            },
-            Point {
-                x: self.3.x + dx,
-                y: self.3.y + dy,
-            },
-        )
-    }
-
-    pub fn scale(&self, s: f32) -> Cubic {
-        Cubic(
-            Point {
-                x: self.0.x * s,
-                y: self.0.y * s,
-            },
-            Point {
-                x: self.1.x * s,
-                y: self.1.y * s,
-            },
-            Point {
-                x: self.2.x * s,
-                y: self.2.y * s,
-            },
-            Point {
-                x: self.3.x * s,
-                y: self.3.y * s,
-            },
-        )
-    }
-
     /// Returns the polynomial B_y(t) of degree 4.
     pub fn y(&self) -> Poly<4> {
         let c = 1.0 * self.0.y;
@@ -163,80 +113,6 @@ impl Cubic {
     }
 }
 
-/// A quadratic Bézier curve consists of three control points.
-#[derive(Debug, Clone, Copy)]
-pub struct Quadratic(pub Point, pub Point, pub Point);
-
-impl Quadratic {
-    /// Evaluates the Bézier curve at a point t.
-    pub fn at(&self, t: f32) -> Point {
-        let q1 = lerp(self.0, self.1, t);
-        let q2 = lerp(self.1, self.2, t);
-        lerp(q1, q2, t)
-    }
-
-    /// Returns the polynomial B_y(t) of degree 4.
-    pub fn y(&self) -> Poly<3> {
-        let c =  1.0 * self.0.y;
-        let b = -2.0 * self.0.y + 2.0 * self.1.y;
-        let a =  1.0 * self.0.y - 2.0 * self.1.y + 1.0 * self.2.y;
-        // ax² + bx + c
-        Poly([c, b, a])
-    }
-
-    /// Returns the polynomial dB_y/dt of degree 3.
-    pub fn dy(&self) -> Poly<2> {
-        let b = -2.0 * self.0.y + 2.0 * self.1.y;
-        let a =  1.0 * self.0.y - 2.0 * self.1.y + 1.0 * self.2.y;
-        // d/dx ax² + bx + c = 2ax + b
-        Poly([b, 2.0 * a])
-    }
-
-    /// Get the Bézier curve translated by some vector (dx, dy).
-    /// Affine transformations on Bézier curves can be applied to
-    /// the control points.
-    pub fn translate(&self, dx: f32, dy: f32) -> Quadratic {
-        Quadratic(
-            Point {
-                x: self.0.x + dx,
-                y: self.0.y + dy,
-            },
-            Point {
-                x: self.1.x + dx,
-                y: self.1.y + dy,
-            },
-            Point {
-                x: self.2.x + dx,
-                y: self.2.y + dy,
-            },
-        )
-    }
-
-    pub fn scale(&self, s: f32) -> Quadratic {
-        Quadratic(
-            Point {
-                x: self.0.x * s,
-                y: self.0.y * s,
-            },
-            Point {
-                x: self.1.x * s,
-                y: self.1.y * s,
-            },
-            Point {
-                x: self.2.x * s,
-                y: self.2.y * s,
-            },
-        )
-    }
-}
-
-/// A quadratic spline is a sequence of quadratic Bézier curves.
-/// If this is used as the contour of some set, it should be a full
-/// loop, i. e. do not omit the last line back to the start point even
-/// if it is a straight line.
-#[derive(Debug)]
-pub struct Spline(Vec<Quadratic>);
-
 impl Spline {
     pub(crate) fn builder() -> Builder {
         Builder {
@@ -247,25 +123,34 @@ impl Spline {
         }
     }
 
+    /// Iterator over the strokes of the spline. I. e. references
+    /// to the underlying quadratic Bézier curves.
     pub fn strokes(&self) -> impl Iterator<Item = &Quadratic> {
         self.0.iter()
     }
 
     pub fn scale(self, s: f32) -> Spline {
-        Spline(self.0.into_iter().map(|bez| bez.scale(s)).collect())
+        Spline(self.0.into_iter().map(|bez| s * bez).collect())
+    }
+
+    /// Creates a "translating" function that spits out translated versions
+    /// of the Bézier curves in the spline. Useful for mapping over a spline.
+    pub fn translate(x: f32, y: f32) -> impl Fn(&Quadratic) -> Quadratic {
+        let dp = Point { x, y };
+        move |bez| *bez + dp
     }
 
     pub fn winding_number(&self, p: Point) -> i32 {
         let mut w = 0;
 
-        for bez in self.strokes().map(|b| b.translate(0.0, -p.y)) {
+        for bez in self.strokes().map(Spline::translate(0.0, -p.y)) {
             // Get the Bézier curves control points.
             let (y0, y1, y2) = (bez.0.y, bez.1.y, bez.2.y);
 
             // Calculate the jump.
             let jmp = if y0 > 0.0 { 8 } else { 0 }
-                    + if y1 > 0.0 { 4 } else { 0 }
-                    + if y2 > 0.0 { 2 } else { 0 };
+                + if y1 > 0.0 { 4 } else { 0 }
+                + if y2 > 0.0 { 2 } else { 0 };
 
             // Calculate the Bézier curves equivalence class.
             let class = 0x2E74 >> jmp;
@@ -296,111 +181,6 @@ pub fn lerp(p: Point, q: Point, t: f32) -> Point {
     Point { x, y }
 }
 
-/// Solve P(x) = 0 for some (linear) polynomial P = mx + b
-pub fn solve_linear(c: f32, m: f32) -> f32 {
-    // Danger: This can be NaN. Not sure if that is a problem.
-    -c / m
-}
-
-/// Solve P(x) = 0 for some polynomial P = ax² + bx + c
-/// Will return (NaN, NaN) if Δ < 0, and the same root twice
-/// if Δ = 0 (root with multiplicity two case).
-pub fn solve_quadratic(c: f32, b: f32, a: f32) -> (f32, f32) {
-    // If a or b is small, dividing by them is dangerous, so we need
-    // to handle these low-order polynomials specially.
-    if approx(0.0, a) {
-        // a ~ 0 => P = bx + c. (linear)
-        let t = solve_linear(c, b);
-        return (t, t);
-    }
-
-    // Discriminant Δ.
-    let delta = b * b - 4.0 * a * c;
-    // Δ = 0 => one root (with multiplicity two)
-    // Δ > 0 => two distinct roots
-    // Δ < 0 => imaginary roots (will be NaN, but never used)
-    (
-        (-b + f32::sqrt(delta)) / (2.0 * a),
-        (-b - f32::sqrt(delta)) / (2.0 * a),
-    )
-}
-
-/// Solve P(x) = 0 for some polynomial P = dx³ + ax² + bx + c.
-pub fn solve_cubic(c: f32, b: f32, a: f32, d: f32) -> Vec<f32> {
-    if approx(0.0, d) {
-        if approx(0.0, a) {
-            if approx(0.0, b) {
-                // Constant equation; either zero or infinitely many solutions.
-                // For our purpose, this corresponds to the ray following a horizontal
-                // segment of a glyph, and we might as well define that to not be an
-                // intersection.
-                return vec![];
-            }
-
-            // Linear equation.
-            return vec![-c / b];
-        }
-
-        // Quadratic equation.
-        let delta = b * b - 4.0 * a * c;
-
-        // Δ = 0 => one root
-        // Δ > 0 => two distinct roots
-        // Δ < 0 => imaginary roots (which we ignore)
-        if delta > 0.0 {
-            return vec![
-                (-b - f32::sqrt(delta)) / (2.0 * a),
-                (-b + f32::sqrt(delta)) / (2.0 * a),
-            ];
-        }
-
-        if delta == 0.0 {
-            return vec![-b / (2.0 * a)];
-        }
-
-        return vec![];
-    }
-
-    // Cubic solution is required.
-
-    // Calculate the depressed cubic P(s) = x³ + px + q.
-    let c = c / d;
-    let b = b / d;
-    let a = a / d;
-
-    let p = (3.0 * b - a.powi(2)) / 3.0;
-    let q = (2.0 * a.powi(3) - 9.0 * a * b + 27.0 * c) / 27.0;
-
-    // Discriminant Δ.
-    let delta = (q).powi(2) / 4.0 + p.powi(3) / 27.0;
-
-    if delta == 0.0 {
-        // Δ = 0 => Two real solutions.
-        let u = -(q / 2.0).cbrt();
-        let v = -(q / 2.0).cbrt();
-        return vec![u + v - a / 3.0, -0.5 * (u + v) - a / 3.0];
-    }
-
-    if delta > 0.0 {
-        // Δ > 0 => One real solution.
-        let u = (-(q / 2.0) + delta.sqrt()).cbrt();
-        let v = (-(q / 2.0) - delta.sqrt()).cbrt();
-        return vec![u + v - a / 3.0];
-    }
-
-    // Δ < 0 => Three real solutions!
-    let r = f32::sqrt(-p.powi(3) / 27.0);
-    let phi = f32::atan2(f32::sqrt(-delta), -q / 2.0);
-
-    // i think i can do this without resorting to trig.
-
-    return vec![
-        2.0 * r.cbrt() * f32::cos(phi / 3.0) - a / 3.0,
-        2.0 * r.cbrt() * f32::cos((phi + 2.0 * PI) / 3.0) - a / 3.0,
-        2.0 * r.cbrt() * f32::cos((phi + 4.0 * PI) / 3.0) - a / 3.0,
-    ];
-}
-
 pub(crate) struct Builder {
     spline: Vec<Quadratic>,
     position: Point,
@@ -427,7 +207,7 @@ impl ttf_parser::OutlineBuilder for Builder {
         // If we are moving after drawing a boundary, loop back to the start.
         // This ensures we have a closed loop.
         if let Some(start) = self.start {
-            if !approx(0.0, Point::d(&start, self.position)) {
+            if !approx(0.0, Point::d(&start, &self.position)) {
                 self.line_to(start.x, start.y);
             }
         }
@@ -444,9 +224,8 @@ impl ttf_parser::OutlineBuilder for Builder {
         let target = Point { x, y };
         let m = lerp(self.position, target, 0.33);
         self.spline.push(
-            Quadratic(self.position, m, target)
-                // Translate the Bézier curve relative to the cursor.
-                .translate(self.cursor.x, self.cursor.y)
+            // Translate the Bézier curve relative to the cursor.
+            Quadratic(self.position, m, target) + self.cursor,
         );
         self.position = target;
     }
@@ -454,13 +233,12 @@ impl ttf_parser::OutlineBuilder for Builder {
     /// Insert a Bézier curve to (x, y)
     fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
         self.spline.push(
+            // Translate the Bézier curve relative to the cursor.
             Quadratic(
                 self.position,
                 Point { x: x1, y: y1 }, // Control point
                 Point { x, y },
-            )
-            // Translate the Bézier curve relative to the cursor.
-            .translate(self.cursor.x, self.cursor.y),
+            ) + self.cursor,
         );
 
         self.position = Point { x, y };
@@ -469,16 +247,15 @@ impl ttf_parser::OutlineBuilder for Builder {
     /// Insert a Bézier curve to (x, y) via the control points (x1, y1), (x2, y2).
     fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
         self.spline.push(
-            Cubic(
+            (Cubic(
                 self.position,
                 Point { x: x1, y: y1 }, // Control point 1
                 Point { x: x2, y: y2 }, // Control point 2
                 Point { x, y },
-            )
-            // Translate the Bézier curve relative to the cursor.
-            .translate(self.cursor.x, self.cursor.y)
-            // Approximate by a quadratic Bézier curve.
-            .lower(),
+            ) + self.cursor)
+                // Translate the Bézier curve relative to the cursor.
+                // Approximate by a quadratic Bézier curve.
+                .lower(),
         );
         self.position = Point { x, y };
     }
@@ -488,10 +265,19 @@ impl ttf_parser::OutlineBuilder for Builder {
         // omitting the line back to the start point if it is a simple straight
         // line.
         if let Some(start) = self.start {
-            if !approx(0.0, Point::d(&start, self.position)) {
+            if !approx(0.0, Point::d(&start, &self.position)) {
                 self.line_to(start.x, start.y);
             }
         }
+    }
+}
+
+impl Point {
+    /// Distance to another point.
+    pub fn d(&self, p: &Point) -> f32 {
+        let dx = f32::abs(p.x - self.x);
+        let dy = f32::abs(p.y - self.y);
+        f32::sqrt(dx.powi(2) + dy.powi(2))
     }
 }
 
@@ -504,5 +290,61 @@ impl<const N: usize> std::fmt::Display for Poly<N> {
             write!(f, "{}x^{}", coef, pow)?;
         }
         Ok(())
+    }
+}
+
+// Arithmetic overloads.
+
+impl ops::Add<Point> for Point {
+    type Output = Point;
+
+    fn add(self, rhs: Point) -> Self::Output {
+        Point {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+        }
+    }
+}
+
+impl ops::Add<Point> for Cubic {
+    type Output = Cubic;
+
+    fn add(self, rhs: Point) -> Self::Output {
+        Cubic(rhs + self.0, rhs + self.1, rhs + self.2, rhs + self.3)
+    }
+}
+
+impl ops::Add<Point> for Quadratic {
+    type Output = Quadratic;
+
+    fn add(self, rhs: Point) -> Self::Output {
+        Quadratic(rhs + self.0, rhs + self.1, rhs + self.2)
+    }
+}
+
+impl ops::Mul<Point> for f32 {
+    type Output = Point;
+
+    fn mul(self, rhs: Point) -> Self::Output {
+        Point {
+            x: self * rhs.x,
+            y: self * rhs.y,
+        }
+    }
+}
+
+impl ops::Mul<Quadratic> for f32 {
+    type Output = Quadratic;
+
+    fn mul(self, rhs: Quadratic) -> Self::Output {
+        Quadratic(self * rhs.0, self * rhs.1, self * rhs.2)
+    }
+}
+
+impl ops::Mul<Cubic> for f32 {
+    type Output = Cubic;
+
+    fn mul(self, rhs: Cubic) -> Self::Output {
+        Cubic(self * rhs.0, self * rhs.1, self * rhs.2, self * rhs.3)
     }
 }

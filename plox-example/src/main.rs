@@ -1,5 +1,5 @@
 use image::ImageBuffer;
-use plox::{spline, Cubic, Point, Spline};
+use plox::{Point, Spline};
 
 fn raster<C>(img: &mut ImageBuffer<image::Rgb<u8>, C>, spline: Spline)
 where
