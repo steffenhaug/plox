@@ -14,7 +14,7 @@ classoption:
 - rasterize bezier curves
 - rasterize text _properly_
 - plots
-- performance is not a goal; correctness is
+- performance is not a goal; correctness is.
     - rationale: I'm not trying to rasterize all of wikipedia, workloads will be relatively small
 
 # Bézier curves background
@@ -24,13 +24,14 @@ classoption:
 
 ### Rasterization
 - software rasterization is trivial: map over t
-- hardware rasterization is easy but slightly harder:
+- hardware rasterization is slightly harder:
     - (x, y) is on the curve if B(t) - (x, y) = 0
     - amounts to solving a polynomial equation
 
 
 # Font loading
-- used ruztybuzz
+- used ttf_parser to parse files
+- used ruztybuzz for shapign; port of harfbuzz's shaping algo
 
 # Glyph rasterization
 The first step of glyph rasterization is to convert the FreeType-strokes into cubic Bézier curves. It would simplify matters _massively_ to restrict ourselves to _quadratic_ Bézier curves, and indeed this is what most material online does, and this is perfectly fine if restricting ourselves to _TrueType_ fonts, as these are simply made up of quadratics, but the problem is that _OpenType_ fonts use _cubic_ curves, so restricting ourselves to quadratics means we either have to choose a different font (the \LaTeX-font is `.otf`) or _approximate_ the cubic Bézier curves. To be clear, this approximation of one lower order can be done quickly and accurately, so it is an interesting option should we meet performance problems with the high-order techniques.
@@ -334,3 +335,43 @@ towards the winding number.
 ![Victory!](report/victory.png)
 
 Now, armed with an algorithm that doesn't suck, we are ready to take on the GPU.
+
+# Hardware-accellerated rasterization
+The plan is as follows: Let a "text-box" be represented by a single quad,
+and put all the Bézier curve control points in a uniform buffer.
+We bake two unsigned integer-attributes into the vertex defning the range of
+Bézier curves that is part of text in its box to restrict the loop in the fragment shader.
+I'm not _exactly_ sure how the GPU executes such code;
+since it is a SIMT architecture, at the very least all the threads will be waiting
+for the longest loop. I'm not sure how the memory access works when all the threads
+have a different loop counter and is accessing different parts of the buffer,
+if different threads in the same block can cache different parts of the uniform buffer and so on.
+There might not be much benefit to such optimization, I'm choosing to remain optimistic however.
+
+The main challenge is the volume of uniforms: For a large box of text, there might
+be _tens of thousands_ of curves. A single $\alpha$ has 41 quadratic bezier curves,
+and a single curve has 3 points $\times$ 2 coordinates $\times$ 4 bytes $=24$ bytes.
+Some random website said that a page of text generally contains $\sim 3000$ characters,
+in other words a pages worth of text could contain $3000*41*24$ bytes, approximately
+3 _megabytes_ of curves.
+We could of course split our text into multiple draw-calls, but that doesn't really
+_solve_ the problem: All the data still needs to be fed to the GPU, and that just
+introduces more costly state transitions and overhead. Almost certainly, sending
+that much data would be faster to do in one go. Uniform buffer objects can only
+store (at least as per defined by the spec) 16KB.
+Needless to say, we need some other strategy for handing off data to the GPU.
+And on a similar note, a lot of the time the data will not actually change from
+drawcall to drawcall: Translating text around the screen will of course be done
+by applying affine transformations to the text-box quad, never actually touching
+the curves, we only need to hit the curve buffer if the text itself changes,
+and this would be a significant CPU time-save.
+So how do we do achieve both support for _large_ buffers, and persistance across
+pipeline invocations?
+
+SSBOs -- Shader Storage Buffer Objects -- seem very appealing, these buffers
+provide at least 128MB (as per the spec, in reality usually arbitrarily large),
+and can also be dynamically sized; a single buffer oject doesnt have a (compile-time)
+static size, like uniform buffers do.
+This is very cool, and is core since OpenGL 4.3, which means it is fair game
+for this project as it's meant to use modern OpenGL. But, this means our program can no longer work on MacOS.
+Sucks to suck i guess.

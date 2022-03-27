@@ -37,5 +37,7 @@ where
         spline.advance(x_advance as f32, y_advance as f32);
     }
 
-    spline.build()
+    let s = spline.build();
+    dbg!(s.0.len());
+    s
 }

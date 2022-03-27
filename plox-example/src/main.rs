@@ -1,6 +1,10 @@
 use image::ImageBuffer;
 use plox::{Point, Spline};
 
+#[macro_use]
+extern crate glium;
+
+/// Software rasterization of a spline to an image. Mostly for debugging purposes.
 fn raster<C>(img: &mut ImageBuffer<image::Rgb<u8>, C>, spline: Spline)
 where
     C: std::ops::DerefMut + std::ops::Deref<Target = [<image::Rgb<u8> as image::Pixel>::Subpixel]>,

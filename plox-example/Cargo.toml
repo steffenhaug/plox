@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 plox = { path = "../plox" }
 image = "0.24.1"
+glium = "0.31.0"

@@ -24,7 +24,7 @@ pub struct Cubic(pub Point, pub Point, pub Point, pub Point);
 /// loop, i. e. do not omit the last line back to the start point even
 /// if it is a straight line (Some .otf fonts do this).
 #[derive(Debug)]
-pub struct Spline(Vec<Quadratic>);
+pub struct Spline(pub(crate) Vec<Quadratic>);
 
 impl Quadratic {
     /// Evaluates the Bézier curve at a point t.
@@ -153,7 +153,7 @@ impl Spline {
                 + if y2 > 0.0 { 2 } else { 0 };
 
             // Calculate the Bézier curves equivalence class.
-            let class = 0x2E74 >> jmp;
+            let class = 0b11 & (0x2E74 >> jmp);
 
             // Solve B_y(t) = 0. The equivalence class determines whether
             // to count these solutions towards the winding number or not.

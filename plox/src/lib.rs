@@ -1,3 +1,10 @@
+//! Plox
+//! This library contains all Bézier curve- and font-related functionality.
+//! Essentially, everything you need to turn strings into Bézier curve buffers,
+//! and everything you need to manipulate said curves.
+//!
+//! There is no OpenGL stuff here, because i want to have the possibility to
+//! switch to Vulkan if i ever seriously intend to maintain this for real.
 pub mod spline;
 pub mod shaping;
 pub mod font;
@@ -14,6 +21,6 @@ fn approx(a: f32, b: f32) -> bool {
 
 
 pub fn load() -> Spline {
-    shaping::shape("α\u{2192}\u{03D1}\u{03B6}")
+    shaping::shape("α")
 }
 

@@ -53,5 +53,9 @@ https://pomax.github.io/bezierinfo/
 https://www.youtube.com/watch?v=N-KXStupwsc   MATHOLOGER CUBIC
 
 
+FONT FORGE FONT RELATED MATH
+https://fontforge.org/docs/techref/pfaeditmath.html
+
+
 ## rust-libraries
 rustybuzz - text shaping. not sure if i need this if im gonna typeset math myself but anyway
