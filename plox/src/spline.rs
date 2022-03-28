@@ -24,7 +24,7 @@ pub struct Cubic(pub Point, pub Point, pub Point, pub Point);
 /// loop, i. e. do not omit the last line back to the start point even
 /// if it is a straight line (Some .otf fonts do this).
 #[derive(Debug)]
-pub struct Spline(pub(crate) Vec<Quadratic>);
+pub struct Spline(pub Vec<Quadratic>);
 
 impl Quadratic {
     /// Evaluates the Bézier curve at a point t.

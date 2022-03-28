@@ -372,6 +372,11 @@ SSBOs -- Shader Storage Buffer Objects -- seem very appealing, these buffers
 provide at least 128MB (as per the spec, in reality usually arbitrarily large),
 and can also be dynamically sized; a single buffer oject doesnt have a (compile-time)
 static size, like uniform buffers do.
+It also persists across multiple invocations of the rendering pipeline, and supports
+partial updating, so we only have to waste CPU-time sending data when something changes,
+and there is theoretically a potential to be a bit smart and just send deltas.
 This is very cool, and is core since OpenGL 4.3, which means it is fair game
 for this project as it's meant to use modern OpenGL. But, this means our program can no longer work on MacOS.
 Sucks to suck i guess.
+
+![The first sucessful run of the hardware-accelerated rasterizer.](report/first_gpu_test.png)

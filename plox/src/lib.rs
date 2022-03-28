@@ -18,9 +18,3 @@ pub use spline::{Point, Cubic, Quadratic, Spline};
 fn approx(a: f32, b: f32) -> bool {
     (a - b).abs() < 1e-4
 }
-
-
-pub fn load() -> Spline {
-    shaping::shape("α")
-}
-
