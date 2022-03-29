@@ -17,11 +17,12 @@ struct Quadratic {
     float y2;
 };
 
+uniform float spacing;
+
 layout(std430, binding = 0) buffer beziers
 {
     Quadratic curves[];
 };
-
 
 bool approx(float x, float y) {
     return abs(x - y) < 1.0e-3;
@@ -56,7 +57,7 @@ vec2 solve(float c, float b, float a) {
     );
 }
 
-int winding_number(vec2 uv) {
+int wn(vec2 uv) {
     int w = 0;
 
     for (int i = 0; i < curves.length(); i++) {
@@ -84,16 +85,22 @@ int winding_number(vec2 uv) {
         // Solve B_y(t) = 0.
         vec2 sol = solve(c, b, a);
 
+        // Calculate coefficients for B_x(t).
+        c =  1.0 * x0;
+        b = -2.0 * x0 + 2.0 * x1;
+        a =  1.0 * x0 - 2.0 * x1 + 1.0 * x2;
+
         // Calculate x1=B_x(sol.s) and x2=B_x(sol.t)
-        float sol_x1 = at(i, sol.s).x;
-        float sol_x2 = at(i, sol.t).x;
+        x1 = c + b*sol.s + a*(sol.s*sol.s);
+        x2 = c + b*sol.t + a*(sol.t*sol.t);
 
         // Add the solutions contributions to the winding number if applicable.
-        if ((k & 1) != 0 && (sol_x1 > uv.x)) {
+
+        if ((k & 1) != 0 && (x1 > uv.x)) {
             w++;
         }
 
-        if ((k & 2) != 0 && (sol_x2 > uv.x)) {
+        if ((k & 2) != 0 && (x2 > uv.x)) {
             w--;
         }
     }
@@ -101,24 +108,75 @@ int winding_number(vec2 uv) {
     return w;
 }
 
-// I found a bug in the Nvidia driver (510.47.03):
-// The shader compiler doesn't understand that reading `curves.length()`
-// should by itself disqualify `curves` from being optimized away. Even
-// setting `color = vec4(float(curves.length()), ...)`, where the length
-// _directly_ influences the color doesn't work unless _some_ element of
-// the buffer have some relation to an `out` symbol.
-out float hack;
-#define dont_remove_ssbo     \
-    do {                     \
-        hack = curves[0].x0; \
-    } while(false);
+float MSAAx4(vec2 uv) {
+    // Gets the alpha channel after antialiasing. This allows you to use it with
+    // a custom color, and then blend it onto a background color.
+
+    // We use a slightly rotated set of sample points relative to the pixel grid.
+    float space = 1000.0 / 400.0; // todo : get this from uniform
+    vec2 a = space * vec2(-0.35, -0.10);
+    vec2 b = space * vec2( 0.10, -0.35);
+    vec2 c = space * vec2( 0.35,  0.10);
+    vec2 d = space * vec2( 0.10,  0.35);
+
+    mat2 W = mat2(
+        wn(uv + a), wn(uv + b),
+        wn(uv + c), wn(uv + d)
+    );
+
+    float alpha = (W[0][0] != 0 ? 0.25 : 0.0)
+                + (W[0][1] != 0 ? 0.25 : 0.0)
+                + (W[1][0] != 0 ? 0.25 : 0.0)
+                + (W[1][1] != 0 ? 0.25 : 0.0);
+
+    return alpha;
+}
+
+float MSAAx16(vec2 uv) {
+    float space = 1000.0 / 400.0;
+    mat4 W = mat4(
+        wn(uv + vec2(-0.75, -0.75)),
+        wn(uv + vec2(-0.75, -0.25)),
+        wn(uv + vec2(-0.75,  0.25)),
+        wn(uv + vec2(-0.75,  0.75)),
+        wn(uv + vec2(-0.25, -0.75)),
+        wn(uv + vec2(-0.25, -0.25)),
+        wn(uv + vec2(-0.25,  0.25)),
+        wn(uv + vec2(-0.25,  0.75)),
+        wn(uv + vec2( 0.25, -0.75)),
+        wn(uv + vec2( 0.25, -0.25)),
+        wn(uv + vec2( 0.25,  0.25)),
+        wn(uv + vec2( 0.25,  0.75)),
+        wn(uv + vec2( 0.75, -0.75)),
+        wn(uv + vec2( 0.75, -0.25)),
+        wn(uv + vec2( 0.75,  0.25)),
+        wn(uv + vec2( 0.75,  0.75))
+    );
+
+    float alpha = 0;
+    for (int i =  0; i < 4; i++) {
+        for (int j =  0; j < 4; j++) {
+            if (W[i][j] != 0) {
+                alpha += 1.0/16.0;
+            }
+        }
+    }
+
+    return alpha;
+}
+
+float SS(vec2 uv) {
+    // Get the single-sample alpha.
+    return wn(uv) != 0.0 ? 1.0 : 0.0;
+}
+
+
+
+
 
 void main() {
-    dont_remove_ssbo;
-
-    color = vec4(1.0, uv.x/1000.0, uv.y/1000.0, 1.0);
-    int w = winding_number(uv);
-    if (w != 0) {
-        color = vec4(float(w), 0.0, 0.0, 1.0);
-    }
+    // Compare MSAA and SS
+    float border = 60.0;
+    float ms = MSAAx16(uv);
+    color = vec4(1.0-ms, 1.0-ms, 1.0-ms, 1.0);
 }

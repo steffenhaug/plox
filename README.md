@@ -25,6 +25,10 @@ there are essentially two options:
 6. typesetting of latex
 7. typesetting of non-character bezier-curve based things (axes, tick marks, etc)
 
+
+## things
+check if allsorts shaper has better API
+
 ## simplifying assumptions:
 - use latex font (include in repo, otf only, hardcoded path, cant go wrong) legal to redistribute
 
@@ -52,9 +56,10 @@ https://pomax.github.io/bezierinfo/
 
 https://www.youtube.com/watch?v=N-KXStupwsc   MATHOLOGER CUBIC
 
-
 FONT FORGE FONT RELATED MATH
 https://fontforge.org/docs/techref/pfaeditmath.html
+
+https://mrandri19.github.io/2019/07/24/modern-text-rendering-linux-overview.html
 
 
 ## rust-libraries

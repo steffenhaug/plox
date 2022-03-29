@@ -2,7 +2,7 @@
 use crate::font;
 use crate::spline::Spline;
 use rustybuzz::{self as buzz, GlyphInfo, GlyphPosition, UnicodeBuffer};
-use ttf_parser::{GlyphId, OutlineBuilder};
+use ttf_parser::GlyphId;
 
 pub fn shape<S>(text: S) -> Spline
 where
@@ -22,7 +22,8 @@ where
         // Offset: How much to offset before drawing the glyph.
         //   https://harfbuzz.github.io/a-simple-shaping-example.html
         // The above link has a code example of how to use this info.
-        // Most "normal" characters have offset=0.
+        // Most "normal" characters have offset=0, so I'll ignore for
+        // now.
         let GlyphInfo { glyph_id, .. } = glyph_buffer.glyph_infos()[i];
         let glyph = GlyphId(glyph_id as u16); // Guaranteed to fit.
 

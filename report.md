@@ -379,4 +379,71 @@ This is very cool, and is core since OpenGL 4.3, which means it is fair game
 for this project as it's meant to use modern OpenGL. But, this means our program can no longer work on MacOS.
 Sucks to suck i guess.
 
-![The first sucessful run of the hardware-accelerated rasterizer.](report/first_gpu_test.png)
+![The first sucessful run of the hardware-accelerated rasterizer.\label{fig:first_gpu}](report/first_gpu_test.png)
+
+Figure \ref{fig:first_gpu} shows the first successful run of a minimal working such shader.
+It is done in a very primitive way, by just using $uv$-coordinates and checking the winding number
+for each $uv$ with the Bézier curves scaled down with a hard-coded constant to fit in the quad.
+I will deal with text composition in a quad _properly_ later, for now that is not the most pressing issue.
+You can clearly see, particularly when rasterizing very small glyphs, that aliasing is a significant issue.
+Especially _thin_ and _curved_ segments of glyphs look extremely bad.
+
+![Horrible aliasing visible when drawing small characters. For comparison: $\nabla \alpha \coloneqq \vartheta$](report/low_size_aliasing.png)
+
+Since we are not sampling a triangle directly for our fragment color, but instead calculating it based on
+curvy math, we have no straight-forward way to make use of OpenGL multisampling.
+We therefore have to calculate the anti-aliasing ourselves, and as with all other text-related business,
+this turns out to be an acrcane art.
+
+# Font rendering
+Beyond simple anti-aliasing, there are a lot of tricks to improving the legibility of rasterized fonts, most motably
+_hinting_ and _subpixel rendering_. Hinting essentially boils down to _adjusting_ the bezier curves surrounding the
+glyph to align with the pixel grid. This gives small font sizes crisper edges, but _changes the shape_ of the font.
+For this reason it is slightly controversial, between people favoring clear edges, and people favoring representing
+a rasterized glyph as the best possible approximation of what the type designer intended.
+On modern, high-resolution displays -- generally speaking -- hinting does next to nothing.
+If a character is big enough to be legible, even thin bits will contain several sample points, and thus aligning
+the curves to the sample points is pointless. I will not attempt to implement hinting.
+
+Subpixel-rendering on the other hand, I think would be a sensible goal. It basiclaly amounts to abusing the
+pixel-layout of modern LCD displays, and -- for example if the screen has RGB-layout left to right in a
+given pixel -- color a pixel blue if its right-most third should be colored white.
+This sounds silly, but on high-resolution displays it actually works, and text rasterization engines like
+ClearType (Windows), Quartz (MaxOS), and FreeType (on by default for me at least) already do it, so unless 
+you have printed this document, you are probably looking at subpixel-rendered text _right now_.
+On the other hand, this requires either making an assumption about the screen the user is using, or making
+it somehow configurable, or somehow detect this, so I want to try and see what kind of results we can achieve
+with simple black-and-white anti-aliasing. There is still some room for optimizing choice of sample points and
+tweaking the number of sample points.
+
+\begin{table}[t]
+\begin{center}
+\begin{tabular}{ccc}
+\hline
+\hline
+\scshape 1 Sample & \scshape 4x MS & \scshape 16x MS \\
+\hline
+\includegraphics[width=.25\columnwidth]{report/aa_test/big_1.png} & 
+\includegraphics[width=.25\columnwidth]{report/aa_test/big_4.png} & 
+\includegraphics[width=.25\columnwidth]{report/aa_test/big_16.png} \\
+
+\includegraphics[width=.25\columnwidth]{report/aa_test/medium_1.png} & 
+\includegraphics[width=.25\columnwidth]{report/aa_test/medium_4.png} & 
+\includegraphics[width=.25\columnwidth]{report/aa_test/medium_16.png} \\
+
+\includegraphics[width=.25\columnwidth]{report/aa_test/tiny_1.png} & 
+\includegraphics[width=.25\columnwidth]{report/aa_test/tiny_4.png} & 
+\includegraphics[width=.25\columnwidth]{report/aa_test/tiny_16.png} \\
+\hline
+\end{tabular}
+\end{center}
+\caption{Various levels of anti-aliasing, for various font-sizes.}
+\end{table}
+
+In the following tabe, I have presented some samples of the black-and-white anti-aliasing.
+The 4x multi-sampling is done with slightly rotated points (approximataly $30^\circ$ relative to the
+pixel grid). If they are aligned horizontally, you get this strange effect where a pair of points
+will either be both inside, or both outside of near-horizontal or -vertical lines.
+I want to do this for the 16x multi-sampling too, but I haven't been able to find any articles
+describing a sensible point-distribution, whereas for 4x multi-sampling i found a point distribution
+in the Vulkan documentation.

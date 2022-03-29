@@ -24,6 +24,7 @@ struct State {
 /// have invalid handles, the right GL context needs to be active,
 /// and so on.
 unsafe fn render(state: &State) {
+    println!("[INFO] Redraw requested.");
     gl::ClearColor(0.0, 0.0, 0.0, 1.0);
     gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
     state.text_renderer.invoke();

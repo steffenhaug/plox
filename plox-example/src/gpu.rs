@@ -1,6 +1,7 @@
 //! Defines interop with GPU, i. e. buffer types,
 //! vertex types, and so on.
 use crate::shader::{Shader, Uniform};
+use plox::spline::{Spline, Quadratic};
 use gl::types::*;
 use std::ptr;
 
@@ -64,6 +65,10 @@ impl TextRenderer {
             0, 2, 3, /* second triangle */
         ];
 
+        // width of screen: 800
+        // uv in range 0-1000 covering 400 pixels
+        // => 1000 / 400 uvs per pixel
+
         let vao = Vao::<2>::gen();
         vao.enable_attrib_arrays();
 
@@ -78,10 +83,13 @@ impl TextRenderer {
         let ibo = Ibo::gen();
         ibo.data(&i);
 
-        let text = plox::shaping::shape("\u{2207}\u{03B1}\u{2254}\u{03D1}").scale(0.33);
+        // Scale and translage the spline.
+        // This REALLY needs some work lmao
+        let text = plox::shaping::shape("\u{2207}\u{03B1}\u{2254}\u{03D1} Anti-aliasing!").scale(0.03);
+        let text = text.strokes().map(Spline::translate(0.0, 50.0)).collect::<Vec<Quadratic>>();
 
         let ssbo = Ssbo::gen();
-        ssbo.data(&text.0);
+        ssbo.data(&text);
         ssbo.bind_base(0);
 
         TextRenderer {
