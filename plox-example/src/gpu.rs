@@ -1,8 +1,8 @@
 //! Defines interop with GPU, i. e. buffer types,
 //! vertex types, and so on.
-use crate::shader::{Shader, Uniform};
-use plox::spline::{Spline, Quadratic};
+use crate::shader::{Shader, UniformMat4};
 use gl::types::*;
+use plox::spline::Quadratic;
 use std::ptr;
 
 pub struct Vao<const N: u32> {
@@ -33,6 +33,8 @@ pub trait Render {
 
 pub struct TextRenderer {
     shader: Shader,
+    model_matrix_u: UniformMat4,
+    proj_matrix_u: UniformMat4,
     vao: Vao<2>,
     quads: u32,
 }
@@ -44,6 +46,29 @@ impl Render for TextRenderer {
 
         // Text is always rendered on quads; a quad has 6 vertices.
         let n_elements = 6 * self.quads;
+
+        let m: glm::Mat4 = glm::translation(&glm::vec3(390.0, 390.0, 0.0))
+            * glm::rotation(3.1415 / 4.0, &glm::vec3(0.0, 0.0, 1.0))
+            * glm::scaling(&glm::vec3(20.0, 20.0, 0.0));
+
+        let p: glm::Mat4 = glm::ortho(
+            0.0,
+            crate::SCREEN_W as f32,
+            0.0,
+            crate::SCREEN_H as f32,
+            0.0,
+            1000.0,
+        );
+
+        gl::UniformMatrix4fv(self.model_matrix_u.0, 1, 0, m.as_ptr());
+        gl::UniformMatrix4fv(self.proj_matrix_u.0, 1, 0, p.as_ptr());
+
+        let du = 40.0 * 0.0025 * 1.0;
+        dbg!(du);
+
+
+
+
 
         gl::DrawElements(
             gl::TRIANGLES,
@@ -57,17 +82,34 @@ impl Render for TextRenderer {
 impl TextRenderer {
     pub unsafe fn new() -> Self {
         let shader = Shader::text_shader();
+        let model_matrix_u = shader.uniform_mat4("model");
+        let proj_matrix_u = shader.uniform_mat4("proj");
 
-        let v: [(f32, f32); 4] = [(-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5)];
-        let uv: [(f32, f32); 4] = [(0.0, 0.0), (1000.0, 0.0), (1000.0, 1000.0), (0.0, 1000.0)];
+        // Scale and translage the spline.
+        // This REALLY needs some work lmao
+        let input = "\u{2207}\u{03B1} = \u{222B}\u{1D453}\u{2009}d\u{03BC}";
+        let text = plox::shaping::shape(input, &plox::font::LM_MATH);
+
+        // 800 tall window
+        //
+
+        let bbox = text.bbox();
+
+        dbg!(bbox);
+
+        let v: [(f32, f32); 4] = [
+            (bbox.x0, bbox.y0),
+            (bbox.x1, bbox.y0),
+            (bbox.x1, bbox.y1),
+            (bbox.x0, bbox.y1),
+        ];
+
+        let data = text.strokes().cloned().collect::<Vec<Quadratic>>();
+
         let i: [u32; 6] = [
             0, 1, 2, /* first triangle */
             0, 2, 3, /* second triangle */
         ];
-
-        // width of screen: 800
-        // uv in range 0-1000 covering 400 pixels
-        // => 1000 / 400 uvs per pixel
 
         let vao = Vao::<2>::gen();
         vao.enable_attrib_arrays();
@@ -77,24 +119,21 @@ impl TextRenderer {
         vao.attrib_ptr(0, 2, gl::FLOAT);
 
         let uvs = Vbo::gen();
-        uvs.data(&uv);
+        uvs.data(&v);
         vao.attrib_ptr(1, 2, gl::FLOAT);
 
         let ibo = Ibo::gen();
         ibo.data(&i);
 
-        // Scale and translage the spline.
-        // This REALLY needs some work lmao
-        let text = plox::shaping::shape("\u{2207}\u{03B1}\u{2254}\u{03D1} Anti-aliasing!").scale(0.03);
-        let text = text.strokes().map(Spline::translate(0.0, 50.0)).collect::<Vec<Quadratic>>();
-
         let ssbo = Ssbo::gen();
-        ssbo.data(&text);
+        ssbo.data(&data[..]);
         ssbo.bind_base(0);
 
         TextRenderer {
             shader,
             vao,
+            model_matrix_u,
+            proj_matrix_u,
             quads: 1,
         }
     }
@@ -209,6 +248,7 @@ fn gl_buf_size<T>(val: &[T]) -> GLsizeiptr {
 }
 
 // Get the OpenGL-compatible pointer to an arbitrary array of numbers
+#[inline(always)]
 fn gl_ptr<T>(val: &[T]) -> *const GLvoid {
-   val.as_ptr() as _
+    val.as_ptr() as _
 }

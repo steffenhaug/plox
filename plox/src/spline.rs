@@ -11,20 +11,34 @@ pub struct Point {
     pub y: f32,
 }
 
+/// Linearly interpolate between points p, q and interpolation vartiable t.
+pub fn lerp(p: Point, q: Point, t: f32) -> Point {
+    let x = (1.0 - t) * p.x + t * q.x;
+    let y = (1.0 - t) * p.y + t * q.y;
+    Point { x, y }
+}
+
 /// A quadratic Bézier curve consists of three control points.
 #[derive(Debug, Clone, Copy)]
 pub struct Quadratic(pub Point, pub Point, pub Point);
-
-/// A cubic Bézier curve consists of four control points.
-#[derive(Debug, Clone, Copy)]
-pub struct Cubic(pub Point, pub Point, pub Point, pub Point);
 
 /// A quadratic spline is a sequence of quadratic Bézier curves.
 /// If this is used as the contour of some set, it should be a full
 /// loop, i. e. do not omit the last line back to the start point even
 /// if it is a straight line (Some .otf fonts do this).
 #[derive(Debug)]
-pub struct Spline(pub Vec<Quadratic>);
+pub struct Spline {
+    beziers: Vec<Quadratic>,
+    bbox: Rect,
+}
+
+#[derive(Debug)]
+pub struct Rect {
+    pub x0: f32,
+    pub x1: f32,
+    pub y0: f32,
+    pub y1: f32,
+}
 
 impl Quadratic {
     /// Evaluates the Bézier curve at a point t.
@@ -52,85 +66,32 @@ impl Quadratic {
     }
 }
 
-impl Cubic {
-    /// Evaluates the Bézier curve at a point t.
-    pub fn at(&self, t: f32) -> Point {
-        let q1 = lerp(self.0, self.1, t);
-        let q2 = lerp(self.1, self.2, t);
-        let q3 = lerp(self.2, self.3, t);
-
-        let q4 = lerp(q1, q2, t);
-        let q5 = lerp(q2, q3, t);
-
-        lerp(q4, q5, t)
-    }
-
-    pub fn lower(&self) -> Quadratic {
-        // This is just an unrolled matrix multiplication, nothing scary.
-
-        // P0
-        let x0 = 19.0 * self.0.x + 3.0 * self.1.x - 3.0 * self.2.x + 1.0 * self.3.x;
-        let y0 = 19.0 * self.0.y + 3.0 * self.1.y - 3.0 * self.2.y + 1.0 * self.3.y;
-        let p0 = Point {
-            x: x0 / 20.0,
-            y: y0 / 20.0,
-        };
-
-        // P1
-        let x1 = -5.0 * self.0.x + 15.0 * self.1.x + 15.0 * self.2.x - 5.0 * self.3.x;
-        let y1 = -5.0 * self.0.y + 15.0 * self.1.y + 15.0 * self.2.y - 5.0 * self.3.y;
-        let p1 = Point {
-            x: x1 / 20.0,
-            y: y1 / 20.0,
-        };
-
-        // P2
-        let x2 = 1.0 * self.0.x - 3.0 * self.1.x + 3.0 * self.2.x + 19.0 * self.3.x;
-        let y2 = 1.0 * self.0.y - 3.0 * self.1.y + 3.0 * self.2.y + 19.0 * self.3.y;
-        let p2 = Point {
-            x: x2 / 20.0,
-            y: y2 / 20.0,
-        };
-
-        Quadratic(p0, p1, p2)
-    }
-
-    /// Returns the polynomial B_y(t) of degree 4.
-    pub fn y(&self) -> Poly<4> {
-        let c = 1.0 * self.0.y;
-        let b = -3.0 * self.0.y + 3.0 * self.1.y;
-        let a = 3.0 * self.0.y - 6.0 * self.1.y + 3.0 * self.2.y;
-        let d = -1.0 * self.0.y + 3.0 * self.1.y - 3.0 * self.2.y + 1.0 * self.3.y;
-        Poly([c, b, a, d])
-    }
-
-    /// Returns the polynomial dB_y/dt of degree 3.
-    pub fn dy(&self) -> Poly<3> {
-        let b = -3.0 * self.0.y + 3.0 * self.1.y;
-        let a = 3.0 * self.0.y - 6.0 * self.1.y + 3.0 * self.2.y;
-        let d = -1.0 * self.0.y + 3.0 * self.1.y - 3.0 * self.2.y + 1.0 * self.3.y;
-        Poly([b, 2.0 * a, 3.0 * d])
-    }
-}
-
 impl Spline {
-    pub(crate) fn builder() -> Builder {
-        Builder {
-            spline: vec![],
-            position: Point { x: 0.0, y: 0.0 },
-            start: None,
-            cursor: Point { x: 0.0, y: 0.0 },
-        }
-    }
-
     /// Iterator over the strokes of the spline. I. e. references
     /// to the underlying quadratic Bézier curves.
     pub fn strokes(&self) -> impl Iterator<Item = &Quadratic> {
-        self.0.iter()
+        self.beziers.iter()
+    }
+
+    pub fn len(&self) -> usize {
+        self.beziers.len()
+    }
+
+    pub fn bbox(&self) -> &Rect {
+        &self.bbox
     }
 
     pub fn scale(self, s: f32) -> Spline {
-        Spline(self.0.into_iter().map(|bez| s * bez).collect())
+        Spline {
+            // I think this reallocates, which isn't good.
+            beziers: self.beziers.into_iter().map(|bez| s * bez).collect(),
+            bbox: Rect {
+                x0: s * self.bbox.x0,
+                x1: s * self.bbox.x1,
+                y0: s * self.bbox.y0,
+                y1: s * self.bbox.y1,
+            },
+        }
     }
 
     /// Creates a "translating" function that spits out translated versions
@@ -140,6 +101,8 @@ impl Spline {
         move |bez| *bez + dp
     }
 
+    // Eric Lengyels Winding Number Algorithm.
+    //   https://jcgt.org/published/0006/02/02/paper.pdf
     pub fn winding_number(&self, p: Point) -> i32 {
         let mut w = 0;
 
@@ -153,7 +116,7 @@ impl Spline {
                 + if y2 > 0.0 { 2 } else { 0 };
 
             // Calculate the Bézier curves equivalence class.
-            let class = 0b11 & (0x2E74 >> jmp);
+            let class = 0x2E74 >> jmp;
 
             // Solve B_y(t) = 0. The equivalence class determines whether
             // to count these solutions towards the winding number or not.
@@ -172,26 +135,48 @@ impl Spline {
 
         return w;
     }
+
+    pub fn builder() -> Builder {
+        Builder {
+            beziers: vec![],
+            position: Point { x: 0.0, y: 0.0 },
+            start: None,
+            cursor: Point { x: 0.0, y: 0.0 },
+            // The bbox is not _completely_ tight: It has to preserve
+            // kerning information, that's why the lower bounds start
+            // at zero, and not infinity.
+            y0: 0.0,
+            y1: -f32::INFINITY,
+            x0: 0.0,
+            x1: -f32::INFINITY,
+        }
+    }
 }
 
-/// Linearly interpolate between points p, q and interpolation vartiable t.
-pub fn lerp(p: Point, q: Point, t: f32) -> Point {
-    let x = (1.0 - t) * p.x + t * q.x;
-    let y = (1.0 - t) * p.y + t * q.y;
-    Point { x, y }
-}
-
-pub(crate) struct Builder {
-    spline: Vec<Quadratic>,
+pub struct Builder {
+    beziers: Vec<Quadratic>,
     position: Point,
     start: Option<Point>,
     // Cursor: All the other points are relative to this.
     cursor: Point,
+    // Bounding box.
+    y0: f32,
+    y1: f32,
+    x0: f32,
+    x1: f32,
 }
 
 impl Builder {
     pub(crate) fn build(self) -> Spline {
-        Spline(self.spline)
+        Spline {
+            beziers: self.beziers,
+            bbox: Rect {
+                x0: self.x0,
+                x1: self.x1,
+                y0: self.y0,
+                y1: self.y1,
+            },
+        }
     }
 
     /// Advances the cursor.
@@ -199,11 +184,21 @@ impl Builder {
         self.cursor.x += x;
         self.cursor.y += y;
     }
+
+    fn expand_bbox(&mut self, x: f32, y: f32) {
+        let x = x + self.cursor.x;
+        let y = y + self.cursor.y;
+        self.y0 = f32::min(self.y0, y);
+        self.y1 = f32::max(self.y1, y);
+        self.x0 = f32::min(self.x0, x);
+        self.x1 = f32::max(self.x1, x);
+    }
 }
 
 /// Using this, the TTF-library can construct a spline from a glyph.
 impl ttf_parser::OutlineBuilder for Builder {
     fn move_to(&mut self, x: f32, y: f32) {
+        self.expand_bbox(x, y);
         // If we are moving after drawing a boundary, loop back to the start.
         // This ensures we have a closed loop.
         if let Some(start) = self.start {
@@ -220,10 +215,11 @@ impl ttf_parser::OutlineBuilder for Builder {
     }
 
     fn line_to(&mut self, x: f32, y: f32) {
+        self.expand_bbox(x, y);
         // A straight line cubic can be made with two control points on said line.
         let target = Point { x, y };
         let m = lerp(self.position, target, 0.33);
-        self.spline.push(
+        self.beziers.push(
             // Translate the Bézier curve relative to the cursor.
             Quadratic(self.position, m, target) + self.cursor,
         );
@@ -232,7 +228,9 @@ impl ttf_parser::OutlineBuilder for Builder {
 
     /// Insert a Bézier curve to (x, y)
     fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
-        self.spline.push(
+        self.expand_bbox(x1, y1);
+        self.expand_bbox(x, y);
+        self.beziers.push(
             // Translate the Bézier curve relative to the cursor.
             Quadratic(
                 self.position,
@@ -245,19 +243,9 @@ impl ttf_parser::OutlineBuilder for Builder {
     }
 
     /// Insert a Bézier curve to (x, y) via the control points (x1, y1), (x2, y2).
-    fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
-        self.spline.push(
-            (Cubic(
-                self.position,
-                Point { x: x1, y: y1 }, // Control point 1
-                Point { x: x2, y: y2 }, // Control point 2
-                Point { x, y },
-            ) + self.cursor)
-                // Translate the Bézier curve relative to the cursor.
-                // Approximate by a quadratic Bézier curve.
-                .lower(),
-        );
-        self.position = Point { x, y };
+    fn curve_to(&mut self, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32) {
+        // No accurate cubic->quadratic approximation yet.
+        unimplemented!()
     }
 
     fn close(&mut self) {
@@ -306,14 +294,6 @@ impl ops::Add<Point> for Point {
     }
 }
 
-impl ops::Add<Point> for Cubic {
-    type Output = Cubic;
-
-    fn add(self, rhs: Point) -> Self::Output {
-        Cubic(rhs + self.0, rhs + self.1, rhs + self.2, rhs + self.3)
-    }
-}
-
 impl ops::Add<Point> for Quadratic {
     type Output = Quadratic;
 
@@ -338,13 +318,5 @@ impl ops::Mul<Quadratic> for f32 {
 
     fn mul(self, rhs: Quadratic) -> Self::Output {
         Quadratic(self * rhs.0, self * rhs.1, self * rhs.2)
-    }
-}
-
-impl ops::Mul<Cubic> for f32 {
-    type Output = Cubic;
-
-    fn mul(self, rhs: Cubic) -> Self::Output {
-        Cubic(self * rhs.0, self * rhs.1, self * rhs.2, self * rhs.3)
     }
 }

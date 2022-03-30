@@ -11,7 +11,7 @@ pub mod font;
 pub mod polynomial;
 
 pub use polynomial::Poly;
-pub use spline::{Point, Cubic, Quadratic, Spline};
+pub use spline::{Point, Quadratic, Spline};
 
 /// Check if two numbers a,b are approximately equal.
 /// "Apprixmately" has a _very_ liberal definition in this case.

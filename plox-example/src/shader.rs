@@ -10,9 +10,7 @@ pub struct Shader {
     pub shader: GLuint,
 }
 
-pub struct Uniform {
-    uniform: GLuint,
-}
+pub struct UniformMat4(pub GLint);
 
 impl Shader {
     /// A shader dedicated to rendering text.
@@ -37,6 +35,25 @@ impl Shader {
 
     pub unsafe fn bind(&self) {
         gl::UseProgram(self.shader);
+    }
+
+    pub unsafe fn uniform_mat4(&self, name: &str) -> UniformMat4 {
+        if let Some(loc) = self.uniform_location(name) {
+            return UniformMat4(loc);
+        }
+
+        panic!("invalid uniform")
+    }
+
+    unsafe fn uniform_location(&self, name: &str) -> Option<GLint> {
+        self.bind();
+        let name = CString::new(name).ok()?;
+        let loc = gl::GetUniformLocation(self.shader, name.as_ptr());
+        if loc != -1 {
+            Some(loc)
+        } else {
+            None
+        }
     }
 
     /// Compile a shader with error check.

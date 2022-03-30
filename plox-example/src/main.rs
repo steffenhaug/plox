@@ -1,3 +1,5 @@
+extern crate nalgebra_glm as glm;
+
 mod gpu;
 mod shader;
 mod util;
@@ -10,8 +12,8 @@ use glutin::{Api::OpenGl, GlRequest::Specific};
 
 use std::ptr;
 
-const SCREEN_W: u32 = 1000;
-const SCREEN_H: u32 = 1000;
+pub const SCREEN_W: u32 = 800;
+pub const SCREEN_H: u32 = 600;
 
 /// Contains everything that is used to feed data to the GPU.
 struct State {
@@ -24,7 +26,6 @@ struct State {
 /// have invalid handles, the right GL context needs to be active,
 /// and so on.
 unsafe fn render(state: &State) {
-    println!("[INFO] Redraw requested.");
     gl::ClearColor(0.0, 0.0, 0.0, 1.0);
     gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
     state.text_renderer.invoke();
@@ -49,7 +50,7 @@ fn main() {
     let wb = glutin::window::WindowBuilder::new()
         .with_title("JalLaTeX")
         .with_resizable(false)
-        .with_inner_size(glutin::dpi::LogicalSize::new(SCREEN_W, SCREEN_H));
+        .with_inner_size(glutin::dpi::PhysicalSize::new(SCREEN_W, SCREEN_H));
 
     let cb = glutin::ContextBuilder::new()
         // I need this version for SSBO. Without this, it defaulted to ES 3.2.
@@ -80,14 +81,12 @@ fn main() {
     // OpenGL Initializerion.
     //
     unsafe {
-        /*
         gl::Enable(gl::DEPTH_TEST);
         gl::DepthFunc(gl::LESS);
         gl::Enable(gl::CULL_FACE);
         gl::Disable(gl::MULTISAMPLE);
         gl::Enable(gl::BLEND);
         gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
-        */
         gl::Enable(gl::DEBUG_OUTPUT_SYNCHRONOUS);
         gl::DebugMessageCallback(Some(util::debug_callback), ptr::null());
 

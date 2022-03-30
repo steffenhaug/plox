@@ -5,6 +5,8 @@ out vec4 color;
 in PASS_TO_FRAGMENT_SHADER
 {
     vec2 uv;
+    float du;
+    float dv;
 };
 
 
@@ -17,23 +19,21 @@ struct Quadratic {
     float y2;
 };
 
-uniform float spacing;
-
 layout(std430, binding = 0) buffer beziers
 {
     Quadratic curves[];
 };
 
 bool approx(float x, float y) {
-    return abs(x - y) < 1.0e-3;
+    return abs(x - y) < 1.0e-6;
 }
 
 vec2 at(int i, float t) {
     vec2 q1 = mix(vec2(curves[i].x0, curves[i].y0),
-                   vec2(curves[i].x1, curves[i].y1), t);
+                  vec2(curves[i].x1, curves[i].y1), t);
 
     vec2 q2 = mix(vec2(curves[i].x1, curves[i].y1),
-                   vec2(curves[i].x2, curves[i].y2), t);
+                  vec2(curves[i].x2, curves[i].y2), t);
 
     return mix(q1, q2, t);
 }
@@ -42,13 +42,12 @@ vec2 solve(float c, float b, float a) {
     // Check if we need a linear approximation.
     if (approx(0.0, a)) {
         // Divide by zero is actually okay; the equivalence classes
-        // will make sure invalid solutions remain unused.
+        // will make sure invalid solutions are not used. Divide by
+        // zero here corresponds to horizontal lines, and those are
+        // simply defined to not cause intersections.
         return vec2(-c/b, -c/b);
     }
 
-    // Δ = 0 => one root (with multiplicity two)
-    // Δ > 0 => two distinct roots
-    // Δ < 0 => imaginary roots (will be NaN, but never used)
     float  delta = b*b - 4.0*a*c;
 
     return vec2(
@@ -96,11 +95,11 @@ int wn(vec2 uv) {
 
         // Add the solutions contributions to the winding number if applicable.
 
-        if ((k & 1) != 0 && (x1 > uv.x)) {
+        if ((k & 1) != 0 && x1 > uv.x) {
             w++;
         }
 
-        if ((k & 2) != 0 && (x2 > uv.x)) {
+        if ((k & 2) != 0 && x2 > uv.x) {
             w--;
         }
     }
@@ -108,16 +107,12 @@ int wn(vec2 uv) {
     return w;
 }
 
-float MSAAx4(vec2 uv) {
-    // Gets the alpha channel after antialiasing. This allows you to use it with
-    // a custom color, and then blend it onto a background color.
-
-    // We use a slightly rotated set of sample points relative to the pixel grid.
-    float space = 1000.0 / 400.0; // todo : get this from uniform
-    vec2 a = space * vec2(-0.35, -0.10);
-    vec2 b = space * vec2( 0.10, -0.35);
-    vec2 c = space * vec2( 0.35,  0.10);
-    vec2 d = space * vec2( 0.10,  0.35);
+/// Sample the text with 4 unformly spaced, slightly rotated sample points. 
+float sample_MSAAx4(vec2 uv) {
+    vec2 a = vec2(-0.35, -0.10);
+    vec2 b = vec2( 0.10, -0.35);
+    vec2 c = vec2( 0.35,  0.10);
+    vec2 d = vec2( 0.10,  0.35);
 
     mat2 W = mat2(
         wn(uv + a), wn(uv + b),
@@ -132,51 +127,53 @@ float MSAAx4(vec2 uv) {
     return alpha;
 }
 
-float MSAAx16(vec2 uv) {
-    float space = 1000.0 / 400.0;
+/// Sample the text with 16 uniformly spaced samples.
+float sample_MSAAx16(vec2 uv) {
     mat4 W = mat4(
-        wn(uv + vec2(-0.75, -0.75)),
-        wn(uv + vec2(-0.75, -0.25)),
-        wn(uv + vec2(-0.75,  0.25)),
-        wn(uv + vec2(-0.75,  0.75)),
-        wn(uv + vec2(-0.25, -0.75)),
-        wn(uv + vec2(-0.25, -0.25)),
-        wn(uv + vec2(-0.25,  0.25)),
-        wn(uv + vec2(-0.25,  0.75)),
-        wn(uv + vec2( 0.25, -0.75)),
-        wn(uv + vec2( 0.25, -0.25)),
-        wn(uv + vec2( 0.25,  0.25)),
-        wn(uv + vec2( 0.25,  0.75)),
-        wn(uv + vec2( 0.75, -0.75)),
-        wn(uv + vec2( 0.75, -0.25)),
-        wn(uv + vec2( 0.75,  0.25)),
-        wn(uv + vec2( 0.75,  0.75))
+        wn(uv + vec2(du * -0.75, dv * -0.75)),
+        wn(uv + vec2(du * -0.75, dv * -0.25)),
+        wn(uv + vec2(du * -0.75, dv *  0.25)),
+        wn(uv + vec2(du * -0.75, dv *  0.75)),
+        wn(uv + vec2(du * -0.25, dv * -0.75)),
+        wn(uv + vec2(du * -0.25, dv * -0.25)),
+        wn(uv + vec2(du * -0.25, dv *  0.25)),
+        wn(uv + vec2(du * -0.25, dv *  0.75)),
+        wn(uv + vec2(du *  0.25, dv * -0.75)),
+        wn(uv + vec2(du *  0.25, dv * -0.25)),
+        wn(uv + vec2(du *  0.25, dv *  0.25)),
+        wn(uv + vec2(du *  0.25, dv *  0.75)),
+        wn(uv + vec2(du *  0.75, dv * -0.75)),
+        wn(uv + vec2(du *  0.75, dv * -0.25)),
+        wn(uv + vec2(du *  0.75, dv *  0.25)),
+        wn(uv + vec2(du *  0.75, dv *  0.75))
     );
 
-    float alpha = 0;
-    for (int i =  0; i < 4; i++) {
-        for (int j =  0; j < 4; j++) {
-            if (W[i][j] != 0) {
-                alpha += 1.0/16.0;
-            }
-        }
-    }
+    float alpha = (W[0][0] != 0 ? 1.0/16.0 : 0.0)
+                + (W[0][1] != 0 ? 1.0/16.0 : 0.0)
+                + (W[0][2] != 0 ? 1.0/16.0 : 0.0)
+                + (W[0][3] != 0 ? 1.0/16.0 : 0.0)
+                + (W[1][0] != 0 ? 1.0/16.0 : 0.0)
+                + (W[1][1] != 0 ? 1.0/16.0 : 0.0)
+                + (W[1][2] != 0 ? 1.0/16.0 : 0.0)
+                + (W[1][3] != 0 ? 1.0/16.0 : 0.0)
+                + (W[2][0] != 0 ? 1.0/16.0 : 0.0)
+                + (W[2][1] != 0 ? 1.0/16.0 : 0.0)
+                + (W[2][2] != 0 ? 1.0/16.0 : 0.0)
+                + (W[2][3] != 0 ? 1.0/16.0 : 0.0)
+                + (W[3][0] != 0 ? 1.0/16.0 : 0.0)
+                + (W[3][1] != 0 ? 1.0/16.0 : 0.0)
+                + (W[3][2] != 0 ? 1.0/16.0 : 0.0)
+                + (W[3][3] != 0 ? 1.0/16.0 : 0.0);
 
     return alpha;
 }
 
-float SS(vec2 uv) {
-    // Get the single-sample alpha.
+/// Sample the text with a single sample.
+float sample_single(vec2 uv) {
     return wn(uv) != 0.0 ? 1.0 : 0.0;
 }
 
-
-
-
-
 void main() {
-    // Compare MSAA and SS
-    float border = 60.0;
-    float ms = MSAAx16(uv);
+    float ms = sample_MSAAx16(uv+0.025);
     color = vec4(1.0-ms, 1.0-ms, 1.0-ms, 1.0);
 }

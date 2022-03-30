@@ -6,6 +6,7 @@ links-as-notes: true
 header-includes:
 - \usepackage{mathtools}
 - \usepackage{xcolor}
+- \usepackage{xfrac}
 - \interfootnotelinepenalty=10000
 classoption:
 - twocolumn
@@ -395,7 +396,7 @@ curvy math, we have no straight-forward way to make use of OpenGL multisampling.
 We therefore have to calculate the anti-aliasing ourselves, and as with all other text-related business,
 this turns out to be an acrcane art.
 
-# Font rendering
+# Quality font rendering
 Beyond simple anti-aliasing, there are a lot of tricks to improving the legibility of rasterized fonts, most motably
 _hinting_ and _subpixel rendering_. Hinting essentially boils down to _adjusting_ the bezier curves surrounding the
 glyph to align with the pixel grid. This gives small font sizes crisper edges, but _changes the shape_ of the font.
@@ -405,16 +406,11 @@ On modern, high-resolution displays -- generally speaking -- hinting does next t
 If a character is big enough to be legible, even thin bits will contain several sample points, and thus aligning
 the curves to the sample points is pointless. I will not attempt to implement hinting.
 
-Subpixel-rendering on the other hand, I think would be a sensible goal. It basiclaly amounts to abusing the
-pixel-layout of modern LCD displays, and -- for example if the screen has RGB-layout left to right in a
-given pixel -- color a pixel blue if its right-most third should be colored white.
-This sounds silly, but on high-resolution displays it actually works, and text rasterization engines like
-ClearType (Windows), Quartz (MaxOS), and FreeType (on by default for me at least) already do it, so unless 
-you have printed this document, you are probably looking at subpixel-rendered text _right now_.
-On the other hand, this requires either making an assumption about the screen the user is using, or making
-it somehow configurable, or somehow detect this, so I want to try and see what kind of results we can achieve
-with simple black-and-white anti-aliasing. There is still some room for optimizing choice of sample points and
-tweaking the number of sample points.
+Subpixel rendering would be a nice goal, but since it relies on basically exploiting the physical layout of
+a pixel on the screen, and _coloring_ a pixel to light up a speficif fraction of it, this introduces assumptions
+about the users monitor. Personally, I have one monitor which is rotated vertically, and one which is not,
+so subpixel rendering _just doesnt work_. If i moved a window between monitors, the text would look horrible.
+Furthermore, this is just not necessary on modern high resolution displays.
 
 \begin{table}[t]
 \begin{center}
@@ -447,3 +443,99 @@ will either be both inside, or both outside of near-horizontal or -vertical line
 I want to do this for the 16x multi-sampling too, but I haven't been able to find any articles
 describing a sensible point-distribution, whereas for 4x multi-sampling i found a point distribution
 in the Vulkan documentation.
+
+![](report/aa_test/evince_tiny.png)
+
+For the record, above is how the same text, with a similar font size, renders in Evince,
+a pretty standard PDF-reader that presumably uses FreeType. As you can see, there is probably
+some hinting going on, as the top of the $\nabla$ is quite sharp, and the bottom of the
+$\alpha$ is oddly straight. This is because it has been "massaged" into the pixel grid.
+Do note how much more closely the non-hinted version of $\alpha$ resembles the original design of the glyph!
+All in all, I don't think I'm doing so bad in comparison.
+
+Sampling 16x is obviously fairly expensive. Especially given that sampling requires a fairly
+high number of floating point operations to calculate the solution of a bunch of polynomials.
+But I think modern GPUs are easily more than capable of this, even for absudrly high curve counts.
+I would say that this rasterization is of sufficient quality, and move on.
+
+# Typesetting 101
+In order to produce text elements that can be processed by the graphics pipeline, it is necessary
+to calculate, given a certain piece of text, what its bounding box is, what its $uv$-density is,
+and so on -- $uv$-density in this context being the linear relationship between $uv$-coordinate
+and a unit text-size, needed for example when calculating offsets for the sameple points when multisampling.
+
+Essentially, we need a way to control positioning and size of text.
+There are a few points to consider: If we place two text elements side by side, we certainly
+want their _baseline_ to line up. Thus, if we consider the bottom left corner of the bounding 
+box of the Bézier spline the origin, text elements with _descenders_ will be mis-aligned:
+
+![Anatomy of a typeface from Wikipedia (Public domain). These measurements are queryable.](report/font_measurement.png)
+
+People familiar with \LaTeX will most certainly have stumbled across the `em` measurement.
+This is the basic unit of measure in typography.
+Fonts, however, are specified in "some other" unit of measurement, and the scale can vary from font to font.
+Thankfully it is possible to query the font for its `units_per_em`.
+It is possible to query for a fonts ascender-, capital- and descender-height, but fonts may be designed
+to overshoot these, especially with accents in mind, so this is not reliable for this purpose.
+The most reliable thing to do is to accumulate $\min y$ and $\max y$ as we outline the shaped text,
+making sure to round correctly acountign for anti-aliasing.
+
+Okay, _so what does font size actually mean_?
+Normally, you specify a font size in terms of "dots", dots being \sfrac{1}{72} of an inch (great...).
+The window size is measured in pixels, and we have no real way of knowing what an "inch" is.
+`winit`, and therefore also `glutin`, does not expose the DPI in any sensible way, and for a very good reason.
+_As far as i know_ the DPI isn't even something that is precisely set most of the time. Moreover, if you change 
+the resolution of your monitor, a "12-point" font will look bigger, _despite the fact_ that 12 points are 
+"supposed" to be \sfrac{12}{72}s of an inch. This is -- of course -- because _a pixel is not a dot_.
+Without a context tying your text to a _literal sheet of paper_, (like a page in Microsoft Word)
+a "dot" is a meaningless measurement. So what is the "correct" thing to do?
+
+Long story short: Microsoft decided that the answer is 96 pixels per inch.
+In other words, 1 pixel is \sfrac{4}{3} dots. This is the assumption all programs apparently make.
+and to deal with high-DPI monitors, we query `glutin` for its `hidpi_factor` to scale.
+
+Okay. 1em is the point-height of a font, in other words, if we are using a 12-point font,
+$1\text{em} = 12\text{pt} = 16 \text{pixels}$, ignoring any possibility of zooming.
+If we store the quad in units of 1em, we would have an intuitive way to set the font size
+by applying a scaling "model" matrix to the text element -- just scale by $\sfrac{96}{72} \times \text{font size}$.
+Calculating 1em is easy -- just query the font database for ascender- and descender-heights and subtract.
+This is the value our vertex coordinates need to be normalized to.
+The origin is _at the baseline_, on the left side of the box, meaning that to place text,
+apply a translation matrix to the coordinates you want the baseline to be.
+It might be attractive to place the origin a the center of the textbox to make rotation easier,
+but the problem is that it isn't clear what is the "vertical center" of the text.
+For most "normal" text in mixed-case, I suspect rotating around the center relative to x-height
+is the most appealing, but if you have text in all caps, that's probably not the case. Either way,
+you can get whatever reference point you want by calculating a simple matrix.
+
+It might seem overkill to reach for matrices simply to scale and position a 2D quad, but I'm reading
+into the future here, where we want to position text-elements relative to others.
+
+\section{Transformation-invariant \\ Anti Aliasing}
+
+In the anti-aliasing example, the offset between sample points were hard-coded to correspond to
+that specific screen resolution and that specific glyph scaling.
+If we apply a transformation to our text-element, we need to adjust the sampling.
+Think about it: If we are sampling in units of 1em, and we stretch out the text box,
+1em will be further away in pixel terms, so we need to "compress" the area we take samples in.
+
+Thankfully this is pretty simple: The model matrix is what scales our text from units of 1em
+to pixels. If we apply the non-translatory part of this to the basis $\{\hat u, \hat v\}$, the lengths of these
+vectors will tell us how many pixels is equivalent to 1em, regardless of any rotation that might be
+going on.
+\begin{equation}
+1\text{em} = \left| \mathrm M _{3 \times 3} \hat u \right| \text{px}
+\implies
+\Delta u = 1\text{px} = \frac 1 {\left| \mathrm M _{3 \times 3} \hat u\right|}
+\end{equation}
+Is the width of one pixel in the coordinate system of the Bézier curves, and
+similar for $\Delta v$, the _height_ of a pixel.
+It is convenient to think of sample points in a pixel as points in the set
+$[-1, 1] \times [-1, 1]$, which has twice the width and height, so to acommodate this,
+in practise we use half of $\Delta u$ and $\Delta v$.
+If using a perspective projection, you would also need to account for the fragments depth $z$.
+
+![Anti-aliasing in rotated coordinate system.](report/rotated_aa.png)
+
+The results are pretty good. With this working, it should finally be possible to render text
+elements in a scene-graph and have it basically "just work".
