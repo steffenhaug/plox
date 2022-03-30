@@ -107,26 +107,6 @@ int wn(vec2 uv) {
     return w;
 }
 
-/// Sample the text with 4 unformly spaced, slightly rotated sample points. 
-float sample_MSAAx4(vec2 uv) {
-    vec2 a = vec2(-0.35, -0.10);
-    vec2 b = vec2( 0.10, -0.35);
-    vec2 c = vec2( 0.35,  0.10);
-    vec2 d = vec2( 0.10,  0.35);
-
-    mat2 W = mat2(
-        wn(uv + a), wn(uv + b),
-        wn(uv + c), wn(uv + d)
-    );
-
-    float alpha = (W[0][0] != 0 ? 0.25 : 0.0)
-                + (W[0][1] != 0 ? 0.25 : 0.0)
-                + (W[1][0] != 0 ? 0.25 : 0.0)
-                + (W[1][1] != 0 ? 0.25 : 0.0);
-
-    return alpha;
-}
-
 /// Sample the text with 16 uniformly spaced samples.
 float sample_MSAAx16(vec2 uv) {
     mat4 W = mat4(
@@ -168,7 +148,7 @@ float sample_MSAAx16(vec2 uv) {
     return alpha;
 }
 
-/// Sample the text with a single sample.
+/// Sample the text with a single sample. Useful for debugging.
 float sample_single(vec2 uv) {
     return wn(uv) != 0.0 ? 1.0 : 0.0;
 }
