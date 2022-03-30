@@ -1,6 +1,7 @@
 //! Defines interop with GPU, i. e. buffer types,
 //! vertex types, and so on.
 use crate::shader::{Shader, UniformMat4};
+use crate::State;
 use gl::types::*;
 use plox::spline::Quadratic;
 use std::ptr;
@@ -28,7 +29,7 @@ pub struct Ssbo {
 /// to perform the necessary state transitions and draw calls to move data
 /// from the CPU to GPU, and render something on the screen.
 pub trait Render {
-    unsafe fn invoke(&self);
+    unsafe fn invoke(&self, state: &State);
 }
 
 pub struct TextRenderer {
@@ -40,35 +41,25 @@ pub struct TextRenderer {
 }
 
 impl Render for TextRenderer {
-    unsafe fn invoke(&self) {
+    unsafe fn invoke(&self, state: &State) {
         self.vao.bind();
         self.shader.bind();
+
+        let m: glm::Mat4 = glm::translation(&glm::vec3(390.0, 390.0, 0.0))
+            * glm::scaling(&glm::vec3(20.0, 20.0, 0.0));
+
+        // Compute projection matrix.
+        let (w, h) = state.win_dims;
+        let p: glm::Mat4 = glm::ortho(0.0, w as f32, 0.0, h as f32, 0.0, 1000.0);
+
+        // Todo: abstract this (send matrices to the shader program)
+        gl::UniformMatrix4fv(self.model_matrix_u.0, 1, 0, m.as_ptr());
+        gl::UniformMatrix4fv(self.proj_matrix_u.0, 1, 0, p.as_ptr());
 
         // Text is always rendered on quads; a quad has 6 vertices.
         let n_elements = 6 * self.quads;
 
-        let m: glm::Mat4 = glm::translation(&glm::vec3(390.0, 390.0, 0.0))
-            * glm::rotation(3.1415 / 4.0, &glm::vec3(0.0, 0.0, 1.0))
-            * glm::scaling(&glm::vec3(20.0, 20.0, 0.0));
-
-        let p: glm::Mat4 = glm::ortho(
-            0.0,
-            crate::SCREEN_W as f32,
-            0.0,
-            crate::SCREEN_H as f32,
-            0.0,
-            1000.0,
-        );
-
-        gl::UniformMatrix4fv(self.model_matrix_u.0, 1, 0, m.as_ptr());
-        gl::UniformMatrix4fv(self.proj_matrix_u.0, 1, 0, p.as_ptr());
-
-        let du = 40.0 * 0.0025 * 1.0;
-        dbg!(du);
-
-
-
-
+        println!("draw call");
 
         gl::DrawElements(
             gl::TRIANGLES,

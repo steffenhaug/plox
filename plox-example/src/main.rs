@@ -6,17 +6,19 @@ mod util;
 
 use crate::gpu::{Render, TextRenderer};
 
-use glutin::event::{Event, KeyboardInput, VirtualKeyCode::*, WindowEvent};
+use glutin::event::{ElementState::*, Event, KeyboardInput, VirtualKeyCode::*, WindowEvent};
 use glutin::event_loop::ControlFlow;
 use glutin::{Api::OpenGl, GlRequest::Specific};
 
 use std::ptr;
 
+// Initial window size.
 pub const SCREEN_W: u32 = 800;
 pub const SCREEN_H: u32 = 600;
 
 /// Contains everything that is used to feed data to the GPU.
-struct State {
+pub struct State {
+    win_dims: (u32, u32),
     text_renderer: TextRenderer,
 }
 
@@ -28,7 +30,7 @@ struct State {
 unsafe fn render(state: &State) {
     gl::ClearColor(0.0, 0.0, 0.0, 1.0);
     gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-    state.text_renderer.invoke();
+    state.text_renderer.invoke(state);
 }
 
 impl State {
@@ -37,7 +39,10 @@ impl State {
     /// which means you need a valid GL context, which makes this unsafe.
     unsafe fn new() -> State {
         let text_renderer = gpu::TextRenderer::new();
-        State { text_renderer }
+        State {
+            win_dims: (SCREEN_W, SCREEN_H),
+            text_renderer,
+        }
     }
 }
 
@@ -104,24 +109,50 @@ fn main() {
     //
     // Program state.
     //
-    let state = unsafe { State::new() };
+    let mut state = unsafe { State::new() };
 
     //
     // Event loop.
     //
+    // We can actually do simuation on a separate thread if we .join it in
+    // the handling `LoopDestroyed`. Via an event loop proxy, this means we
+    // could concurrently generate requests to udpate the animation state,
+    // without doing any ugly timing hacks in the main event loop.
+    //
+    // Specifically, a separate thread can load a CSV file or something, and
+    // start sending animation events. Or it could hook into Lua or Python
+    // and get data live! Really cool idea.
     el.run(move |event, _, ctrl| {
         *ctrl = ControlFlow::Wait;
 
         match event {
+            // Redraw if requested to.
+            // This is done in two scenarios:
+            //  1. If the OS has invalidated the windows content, for example
+            //     by resizing
+            //  2. We explicitly request it.
             Event::RedrawRequested(_) => {
                 unsafe {
                     render(&state);
                 }
                 ctx.swap_buffers().unwrap();
             }
+            //
+            // Window events.
+            //
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => {
                     *ctrl = ControlFlow::Exit;
+                }
+                // Even with non-resizable window, some window managers still allows
+                // changing the window size by force, so it is important to do this
+                // correctly even if we aren't necessary planning to do it.
+                WindowEvent::Resized(dims) => {
+                    unsafe {
+                        gl::Viewport(0, 0, dims.width as _, dims.height as _);
+                    }
+                    state.win_dims = (dims.width, dims.height);
+                    ctx.resize(dims);
                 }
                 WindowEvent::KeyboardInput {
                     input:
@@ -136,6 +167,10 @@ fn main() {
                     // Keyboard innput handling.
                     //
                     (Escape, _) => *ctrl = ControlFlow::Exit,
+                    (R, Pressed) => { 
+                        println!("R pressed.");
+                        ctx.window().request_redraw();
+                    }
                     (_, _) => (),
                 },
                 _ => (),
