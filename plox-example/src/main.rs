@@ -38,7 +38,12 @@ impl State {
     /// This involves, among other things, compiling and linking shaders,
     /// which means you need a valid GL context, which makes this unsafe.
     unsafe fn new() -> State {
+        let before = std::time::Instant::now();
         let text_renderer = gpu::TextRenderer::new();
+        let after = std::time::Instant::now();
+
+        println!("Renderer initialization time: {}ms", (after - before).as_millis());
+
         State {
             win_dims: (SCREEN_W, SCREEN_H),
             text_renderer,
@@ -121,7 +126,7 @@ fn main() {
     //
     // Specifically, a separate thread can load a CSV file or something, and
     // start sending animation events. Or it could hook into Lua or Python
-    // and get data live! Really cool idea.
+    // and get data live!
     el.run(move |event, _, ctrl| {
         *ctrl = ControlFlow::Wait;
 
@@ -167,8 +172,9 @@ fn main() {
                     // Keyboard innput handling.
                     //
                     (Escape, _) => *ctrl = ControlFlow::Exit,
-                    (R, Pressed) => { 
+                    (R, Pressed) => {
                         println!("R pressed.");
+                        // how to manually redraw
                         ctx.window().request_redraw();
                     }
                     (_, _) => (),

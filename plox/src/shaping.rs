@@ -1,5 +1,4 @@
 //! Text shaping!
-use crate::font;
 use crate::spline::Spline;
 use rustybuzz::{self as buzz, Face, GlyphInfo, GlyphPosition, UnicodeBuffer};
 use ttf_parser::GlyphId;
@@ -11,8 +10,13 @@ where
     // TODO: We can save this allocation if we re-use the buffer.
     let mut unicode_buffer = UnicodeBuffer::new();
     unicode_buffer.push_str(text.as_ref());
-    let glyph_buffer = buzz::shape(face, &[], unicode_buffer);
 
+    let before = std::time::Instant::now();
+    let glyph_buffer = buzz::shape(face, &[], unicode_buffer);
+    let after = std::time::Instant::now();
+    println!("Shaping time: {}ms", (after - before).as_millis());
+
+    let before = std::time::Instant::now();
     let mut spline = Spline::builder();
 
     // For all glyphs in the buffer,
@@ -40,21 +44,13 @@ where
 
     let s = spline.build();
 
-
-    /*
-    dbg!(s.len());
-    dbg!(&font::LM_MATH.ascender());
-    dbg!(&font::LM_MATH.capital_height());
-    dbg!(&font::LM_MATH.x_height());
-    dbg!(&font::LM_MATH.descender());
-    dbg!(&font::LM_MATH.global_bounding_box());
-    dbg!(&font::LM_MATH.units_per_em());
-    */
-
-    dbg!(s.bbox());
     let em = face.units_per_em() as f32;
     let s = s.scale(1.0 / em);
-    dbg!(em, s.bbox());
+
+    let after = std::time::Instant::now();
+    println!("Outlining time: {}ms", (after - before).as_millis());
+
+    dbg!(face.number_of_glyphs());
 
     s
 }

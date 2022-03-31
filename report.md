@@ -539,3 +539,65 @@ If using a perspective projection, you would also need to account for the fragme
 
 The results are pretty good. With this working, it should finally be possible to render text
 elements in a scene-graph and have it basically "just work".
+
+# Scalability
+Now, as we are able to draw arbitary text on a quad, and position it on a screen, we can in
+principle draw arbitrary amounts of text, and even though my workloads are planned to be only
+moderate, I think it is worth reflecting a bit on performance.
+Currently, for every glyph drawn, I send the glyphs curves to the GPU, positioned in the text
+elements $uv$-coordinate system.
+That means, that if I'm rasterizing "$\vartheta \vartheta \vartheta$", the curves of $\vartheta$
+are duplicated three times.
+The advantage of this method, is that -- assuming the text is static -- making the draw call
+has _zero_ bandwidth overhead, all we need to send is the vertex data and uniforms, since
+the final shaped text lives on the GPU.
+
+On the flip side, modifying the text is complicated.
+If you want to replace a glyph, the replacement might have more Bézier curves than the original,
+so even though its possible to do partial updates on the SSBO, it would likely involve
+re-positioning all curves that come after this glpyh to make it fit into the array.
+Not only that, but the _kerning data_ of the following glyph will almost certainly not be correct,
+so we need to re-shape the entire following text anyways.
+
+The other question is one of scale.
+I stated earlier that an average page of text has around 3000 glyphs.
+Well, the font Latin Modern Math has 4804 glyphs, with all its fancy math symbols.
+Latin Modern Regular -- the text kerned for prose -- has _just 821 glyphs_, since it
+just supports latin scripts.
+DejaVu Sans, with all its unicode madness, with hebrew, arabic, georgian, and south-east asian
+scripts, and so on, has 6253 glpyhs. I suspect this will be on the upper end of how big
+"reasonable" fonts are.
+In other words, if we were to try to typeset _just two normal pages_ of text, it would already
+be more economical to upload the whole god damn font, than to try to be smart and upload
+pre-shaped text.
+Obviously, this would be a performance hit for small workloads, but i suspect fairly small.
+And this means that we can submit code points and kerning information as a uniform along
+with our quad, which makes dynamic text trivial.
+All in all, i think a beneficial change.
+Not to mention, that it is possible to optimize this by not including all unicode ranges
+in our atlas -- if we don't plan on typesetting any arabic, we can leave it out to save
+bandwidth on startup.
+
+For the record, at the time of writing this document has 32362 glyhps, and initialization
+-- including parsing the .ttf file, text shaping, outlining the shaped text, and submitting
+the SSBO took 1050ms. Of which 975ms was spent shaping and outlining the text, and just 27ms (!)
+was spent putting the SSBO on the gpu.
+Of the 975ms, 303ms was spent shaping, and 662ms was spent outlining.
+Shaping is the process of calculating glyph offsets for a unicode string, and is inherently
+serial, since the kerning data accumulates.
+For our use case, which is typesetting for mathematical display and plotting, shaping is
+necessary, but for a lot of use cases, for example rendering a PDF or something, the text
+is already pre-shaped by the software that generated the PDF (for example \LaTeX).
+Especially for the _really large_ workloads, text will generally be shaped ahead of time.
+
+The culprit that stands out is the _outlining_ step. It accounts for a whopping 63% of the
+time spent setting up the text rendering system for large workloads.
+If we wanted to typeset this document with DejaVu Sans, the workload of outlining would
+be reduced by _80%_ if we outlined for a font atlas instead of outlining shaped text.
+Even if we did _zero_ attempt at being conservative with which ranges of symbols we need to
+outline.
+With Latin Modern Regular, 97.5% of the work is saved.
+And in addition to this, in the absence of kerning data, outlining a font atlas is trivially
+parallellizable, so we could use something like `rayon` to speed it up, or possibly even
+a compute shader.
+In other words: We go back to the drawing board.

@@ -46,7 +46,7 @@ impl Render for TextRenderer {
         self.shader.bind();
 
         let m: glm::Mat4 = glm::translation(&glm::vec3(390.0, 390.0, 0.0))
-            * glm::scaling(&glm::vec3(20.0, 20.0, 0.0));
+            * glm::scaling(&glm::vec3(10.0, 10.0, 0.0));
 
         // Compute projection matrix.
         let (w, h) = state.win_dims;
@@ -58,8 +58,6 @@ impl Render for TextRenderer {
 
         // Text is always rendered on quads; a quad has 6 vertices.
         let n_elements = 6 * self.quads;
-
-        println!("draw call");
 
         gl::DrawElements(
             gl::TRIANGLES,
@@ -79,14 +77,15 @@ impl TextRenderer {
         // Scale and translage the spline.
         // This REALLY needs some work lmao
         let input = "\u{2207}\u{03B1} = \u{222B}\u{1D453}\u{2009}d\u{03BC}";
+        let before = std::time::Instant::now();
         let text = plox::shaping::shape(input, &plox::font::LM_MATH);
+        let after = std::time::Instant::now();
+        println!("Shaping time: {}ms", (after - before).as_millis());
 
         // 800 tall window
         //
 
         let bbox = text.bbox();
-
-        dbg!(bbox);
 
         let v: [(f32, f32); 4] = [
             (bbox.x0, bbox.y0),
@@ -116,9 +115,12 @@ impl TextRenderer {
         let ibo = Ibo::gen();
         ibo.data(&i);
 
+        let before = std::time::Instant::now();
         let ssbo = Ssbo::gen();
         ssbo.data(&data[..]);
         ssbo.bind_base(0);
+        let after = std::time::Instant::now();
+        println!("SSBO load time: {}ms", (after - before).as_millis());
 
         TextRenderer {
             shader,

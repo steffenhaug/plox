@@ -10,20 +10,35 @@ there are essentially two options:
 - 1 glyph = 1 quad with (bezier?) curves in texture
     - SIGNIFICANTLY harder
     - flexible
-- 1 stroke = 1 triangle
 
 
 ## tentative progression plan:
-1. font loading (utilize a libraty hopefully) and obtain bezier curves
-2. single-character software rasterizer (write a png or something)
+1. ✅font loading (utilize a libraty hopefully) and obtain bezier curves
+2. ✅single-character software rasterizer (write a png or something)
     - figure out AA here
-3. single-character hardware rasterizer
-4. application of transformations to single character (translation and scaling)
+3. ✅single-character hardware rasterizer
+4. ✅application of transformations to single character (translation and scaling)
 5. typesetting engine that parses "latex" into a scene graph
     - special symbols have hardcoded rules
     - use kerning data
-6. typesetting of latex
+6. typesetting of "latex"
 7. typesetting of non-character bezier-curve based things (axes, tick marks, etc)
+
+## immediate to-do list:
+- rendering of multiple text elements
+    - verts need curve index range
+    - TextRenderer needs to manage the curve buffer
+        - does this approach scale? is it more sensible to upload the
+          entire font atlas?
+            pros:
+            - no need to "collect garbage" if text elements are removed
+            - curve buffer doesnt grow for ever if text is added
+            cons:
+            - need to send code points as a uniform with each draw call.
+              this is probably cheap; way more compact than curve data
+
+- profiling, tracing and logging
+
 
 
 ## things
