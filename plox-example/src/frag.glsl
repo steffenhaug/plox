@@ -1,4 +1,4 @@
-#version 430
+#version 440
 
 out vec4 color;
 
@@ -21,7 +21,7 @@ struct Quadratic {
     float y2;
 };
 
-layout(std430, binding = 0) buffer beziers
+readonly layout(std430, binding = 0) buffer beziers
 {
     Quadratic curves[];
 };
@@ -32,7 +32,7 @@ struct Glyph {
     uint end;
 };
 
-layout(std430, binding = 1) buffer LUT
+readonly layout(std430, binding = 1) buffer lut
 {
     Glyph atlas[];
 };
@@ -69,12 +69,9 @@ vec2 solve(float c, float b, float a) {
     );
 }
 
-int wn(vec2 uv) {
+int wn(vec2 uv, uint start, uint end) {
     int w = 0;
     
-    uint start = atlas[glyph].start;
-    uint end   = atlas[glyph].end;
-
     for (uint i = start; i < end; i++) {
         // Get the control points for the Bézier curve with shifted y.
         float y0 = curves[i].y0 - uv.y;
@@ -124,24 +121,24 @@ int wn(vec2 uv) {
 }
 
 /// Sample the text with 16 uniformly spaced samples.
-float sample_MSAAx16(vec2 uv) {
+float sample_MSAAx16(vec2 uv, uint start, uint end) {
     mat4 W = mat4(
-        wn(uv + vec2(du * -0.75, dv * -0.75)),
-        wn(uv + vec2(du * -0.75, dv * -0.25)),
-        wn(uv + vec2(du * -0.75, dv *  0.25)),
-        wn(uv + vec2(du * -0.75, dv *  0.75)),
-        wn(uv + vec2(du * -0.25, dv * -0.75)),
-        wn(uv + vec2(du * -0.25, dv * -0.25)),
-        wn(uv + vec2(du * -0.25, dv *  0.25)),
-        wn(uv + vec2(du * -0.25, dv *  0.75)),
-        wn(uv + vec2(du *  0.25, dv * -0.75)),
-        wn(uv + vec2(du *  0.25, dv * -0.25)),
-        wn(uv + vec2(du *  0.25, dv *  0.25)),
-        wn(uv + vec2(du *  0.25, dv *  0.75)),
-        wn(uv + vec2(du *  0.75, dv * -0.75)),
-        wn(uv + vec2(du *  0.75, dv * -0.25)),
-        wn(uv + vec2(du *  0.75, dv *  0.25)),
-        wn(uv + vec2(du *  0.75, dv *  0.75))
+        wn(uv + vec2(du * -0.75, dv * -0.75), start, end),
+        wn(uv + vec2(du * -0.75, dv * -0.25), start, end),
+        wn(uv + vec2(du * -0.75, dv *  0.25), start, end),
+        wn(uv + vec2(du * -0.75, dv *  0.75), start, end),
+        wn(uv + vec2(du * -0.25, dv * -0.75), start, end),
+        wn(uv + vec2(du * -0.25, dv * -0.25), start, end),
+        wn(uv + vec2(du * -0.25, dv *  0.25), start, end),
+        wn(uv + vec2(du * -0.25, dv *  0.75), start, end),
+        wn(uv + vec2(du *  0.25, dv * -0.75), start, end),
+        wn(uv + vec2(du *  0.25, dv * -0.25), start, end),
+        wn(uv + vec2(du *  0.25, dv *  0.25), start, end),
+        wn(uv + vec2(du *  0.25, dv *  0.75), start, end),
+        wn(uv + vec2(du *  0.75, dv * -0.75), start, end),
+        wn(uv + vec2(du *  0.75, dv * -0.25), start, end),
+        wn(uv + vec2(du *  0.75, dv *  0.25), start, end),
+        wn(uv + vec2(du *  0.75, dv *  0.75), start, end)
     );
 
     float alpha = (W[0][0] != 0 ? 1.0/16.0 : 0.0)
@@ -165,11 +162,13 @@ float sample_MSAAx16(vec2 uv) {
 }
 
 /// Sample the text with a single sample. Useful for debugging.
-float sample_single(vec2 uv) {
-    return wn(uv) != 0.0 ? 1.0 : 0.0;
+float sample_single(vec2 uv, uint start, uint end) {
+    return wn(uv, start, end) != 0.0 ? 1.0 : 0.0;
 }
 
 void main() {
-    float ms = sample_MSAAx16(uv);
-    color = vec4(1.0-ms, 1.0-ms, 1.0-ms, 1.0);
+    uint start = atlas[glyph].start;
+    uint end = atlas[glyph].end;
+    float alpha = sample_single(uv, start, end);
+    color = vec4(0.0, 0.0, 0.0, alpha);
 }

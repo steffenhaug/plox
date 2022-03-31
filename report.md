@@ -630,3 +630,19 @@ of dealing with offsets in the fragment shader.
 The shader needs to have a lookup-table in memory (generated at initialization along with the font
 atlas) from glyph-id to a range of indexes in the font atlas describing which curves are part of
 said glyph.
+
+## So how well did this go?
+First, the good news: Outlining the entire font atlas for Latin Modern Math (~4000 symbols,
+remember) now takes 70ms. Without parallelization ~200ms, but the difference here will depend
+on hardware (i have 4 cores).
+Shaping the entire text of this report takes ~300ms -- roughly the same as before obviously, it is
+still shaping the same text.
+Now, for the bad news: Rendering a frame takes 300ms.
+Even though for each fragment we are solving exactly the same number or fewer polynimials, draw
+calls take ages. The only _real_ change in the shader is that 1. the SSBO is _way_ larger,
+and 2. we are accessing two different SSBOs.
+All the curves are accessed sequentially from the SSBO, at least in principle.
+One funny thing i noticed, is that there is a _huge_ jump in performance from solving
+11 polynomials to solving 12 -- a jump from 10ms per draw call to over 100ms.
+This spike leads me to suspect some form of cache challenge.
+This spike is not present when single-sampling.

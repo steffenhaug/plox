@@ -4,6 +4,7 @@ use crate::shader::{Shader, UniformMat4};
 use crate::State;
 use gl::types::*;
 use plox::atlas::Atlas;
+use plox::shaping::Glyph;
 use std::ptr;
 
 pub struct Vao<const N: u32> {
@@ -37,34 +38,104 @@ pub struct TextRenderer {
     vao: Vao<3>,
     model_matrix_u: UniformMat4,
     proj_matrix_u: UniformMat4,
+    n_quads: u32,
 }
 
 impl Render for TextRenderer {
     unsafe fn invoke(&self, state: &State) {
+        let bef = std::time::Instant::now();
         self.vao.bind();
-        self.shader.bind();
+        let aft = std::time::Instant::now();
+        println!("Bind VAO time = {}ms", (aft - bef).as_millis());
 
-        let m: glm::Mat4 = glm::translation(&glm::vec3(390.0, 390.0, 0.0))
-            * glm::scaling(&glm::vec3(100.0, 100.0, 0.0));
+        let bef = std::time::Instant::now();
+        self.shader.bind();
+        let aft = std::time::Instant::now();
+        println!("Bind Shader time = {}ms", (aft - bef).as_millis());
+
+        let m: glm::Mat4 = glm::translation(&glm::vec3(100.0, 390.0, 0.0))
+            * glm::scaling(&glm::vec3(120.0, 120.0, 0.0));
 
         // Compute projection matrix.
         let (w, h) = state.win_dims;
         let p: glm::Mat4 = glm::ortho(0.0, w as f32, 0.0, h as f32, 0.0, 1000.0);
 
         // Todo: abstract this (send matrices to the shader program)
+        let bef = std::time::Instant::now();
         gl::UniformMatrix4fv(self.model_matrix_u.0, 1, 0, m.as_ptr());
         gl::UniformMatrix4fv(self.proj_matrix_u.0, 1, 0, p.as_ptr());
+        let aft = std::time::Instant::now();
+        println!("Uniform upload time = {}ms", (aft - bef).as_millis());
 
         let bef = std::time::Instant::now();
         gl::DrawElements(
             gl::TRIANGLES,
-            6,
+            6 * self.n_quads as GLint,
             gl::UNSIGNED_INT,
             ptr::null(),
         );
+        gl::Finish(); /* profiling */
         let aft = std::time::Instant::now();
         println!("Draw call time = {}ms", (aft - bef).as_millis());
     }
+}
+
+fn vertex_buffer(
+    glyphs: &Vec<Glyph>,
+) -> (u32, Vec<(f32, f32)>, Vec<(f32, f32)>, Vec<u32>, Vec<u32>) {
+    let positions = glyphs
+        .iter()
+        .flat_map(|glyph| {
+            [
+                (glyph.x + glyph.bbox.x0, glyph.y + glyph.bbox.y0),
+                (glyph.x + glyph.bbox.x1, glyph.y + glyph.bbox.y0),
+                (glyph.x + glyph.bbox.x1, glyph.y + glyph.bbox.y1),
+                (glyph.x + glyph.bbox.x0, glyph.y + glyph.bbox.y1),
+            ]
+        })
+        .collect();
+
+    let uvs = glyphs
+        .iter()
+        .flat_map(|glyph| {
+            [
+                (glyph.bbox.x0, glyph.bbox.y0),
+                (glyph.bbox.x1, glyph.bbox.y0),
+                (glyph.bbox.x1, glyph.bbox.y1),
+                (glyph.bbox.x0, glyph.bbox.y1),
+            ]
+        })
+        .collect();
+
+    let ids = glyphs
+        .iter()
+        .flat_map(|glyph| {
+            [
+                glyph.glyph_id,
+                glyph.glyph_id,
+                glyph.glyph_id,
+                glyph.glyph_id,
+            ]
+        })
+        .collect();
+
+    let idx = (0..glyphs.len() as u32)
+        .flat_map(|i| {
+            let offset = 4 * i;
+            [
+                offset + 0, /* First triangle. */
+                offset + 1,
+                offset + 2,
+                offset + 0, /* Second triangle. */
+                offset + 2,
+                offset + 3,
+            ]
+        })
+        .collect();
+
+    let n = glyphs.len() as u32;
+
+    (n, positions, uvs, ids, idx)
 }
 
 impl TextRenderer {
@@ -76,12 +147,15 @@ impl TextRenderer {
         let bef = std::time::Instant::now();
         let atlas = Atlas::new(&plox::font::LM_MATH);
         let aft = std::time::Instant::now();
-        println!("Atlas creation time = {}ms", (aft - bef).as_millis());
+        println!("Outlining time = {}ms", (aft - bef).as_millis());
 
         // send atlas to the GPU
         let beziers_buf = Ssbo::gen();
         beziers_buf.data(&atlas.outlines);
         beziers_buf.bind_base(0);
+
+        dbg!(&atlas.outlines.len());
+        dbg!(gl_buf_size(&atlas.outlines));
 
         let lut_buf = Ssbo::gen();
         lut_buf.data(&atlas.lut);
@@ -90,58 +164,42 @@ impl TextRenderer {
         //
         // create vertex array
         //
+        let input = "\u{2207}\u{03B1}=\u{222B}\u{1D453}d\u{03BC}";
         let bef = std::time::Instant::now();
-        let text = plox::shaping::shape("\u{222B}", &plox::font::LM_MATH);
+        let text = plox::shaping::shape("LLLLLLL", &plox::font::LM_MATH);
         let aft = std::time::Instant::now();
-        println!("Shaping and outlining time = {}ms", (aft - bef).as_millis());
-        dbg!(&text);
+        println!("Shaping time = {}ms", (aft - bef).as_millis());
+        dbg!(&atlas.lut[690]);
 
         let vao = Vao::<3>::gen();
         vao.enable_attrib_arrays();
 
-        let v = &text[0];
-        dbg!(&atlas.lut[0]);
-        dbg!(&atlas.lut.len());
-        dbg!(v.glyph_id as GLuint);
+        let (n_quads, pos, uv, id, idx) = vertex_buffer(&text);
 
-        let verts = Vbo::gen();
-        verts.data(&[
-            (v.bbox.x0, v.bbox.y0),
-            (v.bbox.x1, v.bbox.y0),
-            (v.bbox.x1, v.bbox.y1),
-            (v.bbox.x0, v.bbox.y1),
-        ]);
+        let vb_pos = Vbo::gen();
+        vb_pos.data(&pos);
         vao.attrib_ptr(0, 2, gl::FLOAT);
 
-        let uvs = Vbo::gen();
-        uvs.data(&[
-            (v.bbox.x0, v.bbox.y0),
-            (v.bbox.x1, v.bbox.y0),
-            (v.bbox.x1, v.bbox.y1),
-            (v.bbox.x0, v.bbox.y1),
-        ]);
+        let vb_uv = Vbo::gen();
+        vb_uv.data(&uv);
         vao.attrib_ptr(1, 2, gl::FLOAT);
 
-        let glyphs = Vbo::gen();
-        glyphs.data(&[
-            v.glyph_id as GLuint,
-            v.glyph_id as GLuint,
-            v.glyph_id as GLuint,
-            v.glyph_id as GLuint,
-        ]);
-        gl::VertexAttribIPointer(2, 1, gl::UNSIGNED_INT, 0, ptr::null());
+        let vb_id = Vbo::gen();
+        vb_id.data(&id);
+        vao.attrib_iptr(2, 1, gl::UNSIGNED_INT);
 
         let ibo = Ibo::gen();
-        ibo.data(&[
-            0, 1, 2, /* first triangle */
-            0, 2, 3, /* second triangle */
-        ]);
+        ibo.data(&idx);
+
+        // Synchronize. (just for profiling purposes).
+        gl::Finish();
 
         TextRenderer {
             shader,
             vao,
             model_matrix_u,
             proj_matrix_u,
+            n_quads,
         }
     }
 }
@@ -171,6 +229,13 @@ impl<const N: u32> Vao<N> {
         let pointer = ptr::null(); // No offset in the buffer.
         let normalized = gl::FALSE;
         gl::VertexAttribPointer(index, size, ty, normalized, stride, pointer);
+    }
+
+    unsafe fn attrib_iptr(&self, index: GLuint, size: GLsizei, ty: GLenum) {
+        self.bind();
+        let stride = 0; // Tightly packed atributes.
+        let pointer = ptr::null(); // No offset in the buffer.
+        gl::VertexAttribIPointer(index, size, ty, stride, pointer);
     }
 
     unsafe fn bind(&self) {
@@ -211,7 +276,7 @@ impl Ibo {
         gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.buffer);
     }
 
-    unsafe fn data<T>(&self, indices: &[T]) {
+    unsafe fn data(&self, indices: &[u32]) {
         self.bind();
         gl::BufferData(
             gl::ELEMENT_ARRAY_BUFFER,

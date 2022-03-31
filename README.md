@@ -76,6 +76,9 @@ https://fontforge.org/docs/techref/pfaeditmath.html
 
 https://mrandri19.github.io/2019/07/24/modern-text-rendering-linux-overview.html
 
+maybe this can simplify anti aliasing 
+https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/fwidth.xhtml
+
 
 ## rust-libraries
 rustybuzz - text shaping. not sure if i need this if im gonna typeset math myself but anyway

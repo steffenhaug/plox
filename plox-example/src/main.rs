@@ -28,7 +28,7 @@ pub struct State {
 /// have invalid handles, the right GL context needs to be active,
 /// and so on.
 unsafe fn render(state: &State) {
-    gl::ClearColor(0.0, 0.0, 0.0, 1.0);
+    gl::ClearColor(1.0, 1.0, 1.0, 1.0);
     gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
     let before = std::time::Instant::now();
@@ -69,13 +69,13 @@ fn main() {
 
     let wb = glutin::window::WindowBuilder::new()
         .with_title("JalLaTeX")
-        .with_resizable(false)
+        .with_resizable(true)
         .with_inner_size(glutin::dpi::PhysicalSize::new(SCREEN_W, SCREEN_H));
 
     let cb = glutin::ContextBuilder::new()
         // I need this version for SSBO. Without this, it defaulted to ES 3.2.
         // Maybe that's a Nvidia driver / Wayland thing.
-        .with_gl(Specific(OpenGl, (4, 3)))
+        .with_gl(Specific(OpenGl, (4, 4)))
         // I think Waylands compositor handles this. With VSync enabled we don't get a context.
         // Should probably set this flag based on whether we are running under Wayland if
         // that is possible to find out.
@@ -101,8 +101,6 @@ fn main() {
     // OpenGL Initializerion.
     //
     unsafe {
-        gl::Enable(gl::DEPTH_TEST);
-        gl::DepthFunc(gl::LESS);
         gl::Enable(gl::CULL_FACE);
         gl::Disable(gl::MULTISAMPLE);
         gl::Enable(gl::BLEND);

@@ -1,4 +1,4 @@
-#version 430
+#version 440
 
 in vec2 position;
 in vec2 uv;
@@ -26,4 +26,3 @@ void main() {
     fragment.dv = 1.0 / (2.0 * length(M3x3 * vec3(0.0, 1.0, 0.0)));
     fragment.glyph = glyph;
 }
-

@@ -3,8 +3,8 @@ use crate::spline::Rect;
 use rustybuzz::{self as buzz, Face, GlyphInfo, GlyphPosition, UnicodeBuffer};
 use ttf_parser as ttf;
 
-#[derive(Debug)]
-pub struct Glyph {
+#[derive(Debug, Clone, Copy)]
+pub struct Glyph { // bad name. glyph is abstract, not at a specific position
     pub glyph_id: u32,
     pub bbox: Rect,
     pub x: f32,
@@ -45,7 +45,7 @@ where
 
         let bbox = face
             .glyph_bounding_box(ttf::GlyphId(glyph_id as u16))
-            // I don't think it is actually safe to do this. fix later.
+            // NOT SAFE! Some characters dont have bounding boxes.
             .unwrap();
 
         // Glyph bounding box in units of 1em.
