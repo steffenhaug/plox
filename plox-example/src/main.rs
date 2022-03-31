@@ -14,7 +14,7 @@ use std::ptr;
 
 // Initial window size.
 pub const SCREEN_W: u32 = 800;
-pub const SCREEN_H: u32 = 600;
+pub const SCREEN_H: u32 = 800;
 
 /// Contains everything that is used to feed data to the GPU.
 pub struct State {
@@ -30,7 +30,15 @@ pub struct State {
 unsafe fn render(state: &State) {
     gl::ClearColor(0.0, 0.0, 0.0, 1.0);
     gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+
+    let before = std::time::Instant::now();
     state.text_renderer.invoke(state);
+    let after = std::time::Instant::now();
+    println!(
+        "Text Renderer invokation time = {}ms",
+        (after - before).as_millis()
+    );
+
 }
 
 impl State {
@@ -41,8 +49,10 @@ impl State {
         let before = std::time::Instant::now();
         let text_renderer = gpu::TextRenderer::new();
         let after = std::time::Instant::now();
-
-        println!("Renderer initialization time: {}ms", (after - before).as_millis());
+        println!(
+            "Renderer initialization time: {}ms",
+            (after - before).as_millis()
+        );
 
         State {
             win_dims: (SCREEN_W, SCREEN_H),

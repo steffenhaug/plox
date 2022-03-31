@@ -601,3 +601,32 @@ And in addition to this, in the absence of kerning data, outlining a font atlas 
 parallellizable, so we could use something like `rayon` to speed it up, or possibly even
 a compute shader.
 In other words: We go back to the drawing board.
+
+# Font Atlas
+Instead of shaping data up front, our new dataflow looks something like this:
+
+![](report/dataflow.svg)
+
+In other words, our text renderer needs to load the font, outline a font atlas, and
+ship that data to the GPU on initialization, and supprt submitting unicode text that will then get
+shaped and stored so the shaped data (offsets and glyph IDs) can easily be submitted every frame.
+This data format is compact. A "glyph" is simply a glyph-ID and an offset from the start of
+the text-element. The glyph-ID is guaranteed to fit in 16 bits, but for practical purposes
+we send a 32 bit int and a 32 bit float:
+```GLSL
+struct Glyph {
+    uint id;
+    float offset;
+}
+```
+Given that -- at least in theory -- glyhps can overlap, it is not possible to uniquely determine
+_one_ glyph that contains a fragment, so a fragment is forced to check its winding number against
+all glyphs submitted in a given draw call.
+However, if we submit one glyph _per quad_, the `Glyph` data can actually be baked in to the vertex
+attributes, and then if glyphs are actually overlapping, this will be nicely handled by the
+graphics pipeline instead of having to deal with this ourselves.
+We can bake the kerning data into the vertex buffer by altering the placement of the quads instead
+of dealing with offsets in the fragment shader.
+The shader needs to have a lookup-table in memory (generated at initialization along with the font
+atlas) from glyph-id to a range of indexes in the font atlas describing which curves are part of
+said glyph.

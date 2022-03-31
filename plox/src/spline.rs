@@ -32,7 +32,7 @@ pub struct Spline {
     bbox: Rect,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Rect {
     pub x0: f32,
     pub x1: f32,
@@ -138,16 +138,13 @@ impl Spline {
 
     pub fn builder() -> Builder {
         Builder {
-            beziers: vec![],
+            beziers: Vec::with_capacity(64),
             position: Point { x: 0.0, y: 0.0 },
             start: None,
-            cursor: Point { x: 0.0, y: 0.0 },
-            // The bbox is not _completely_ tight: It has to preserve
-            // kerning information, that's why the lower bounds start
-            // at zero, and not infinity.
-            y0: 0.0,
+            scale: 1.0,
+            y0: f32::INFINITY,
             y1: -f32::INFINITY,
-            x0: 0.0,
+            x0: f32::INFINITY,
             x1: -f32::INFINITY,
         }
     }
@@ -158,7 +155,7 @@ pub struct Builder {
     position: Point,
     start: Option<Point>,
     // Cursor: All the other points are relative to this.
-    cursor: Point,
+    scale: f32,
     // Bounding box.
     y0: f32,
     y1: f32,
@@ -167,7 +164,7 @@ pub struct Builder {
 }
 
 impl Builder {
-    pub(crate) fn build(self) -> Spline {
+    pub fn build(self) -> Spline {
         Spline {
             beziers: self.beziers,
             bbox: Rect {
@@ -179,15 +176,12 @@ impl Builder {
         }
     }
 
-    /// Advances the cursor.
-    pub(crate) fn advance(&mut self, x: f32, y: f32) {
-        self.cursor.x += x;
-        self.cursor.y += y;
+    pub fn scale(mut self, scale: f32) -> Self {
+        self.scale = scale;
+        self
     }
 
     fn expand_bbox(&mut self, x: f32, y: f32) {
-        let x = x + self.cursor.x;
-        let y = y + self.cursor.y;
         self.y0 = f32::min(self.y0, y);
         self.y1 = f32::max(self.y1, y);
         self.x0 = f32::min(self.x0, x);
@@ -198,6 +192,8 @@ impl Builder {
 /// Using this, the TTF-library can construct a spline from a glyph.
 impl ttf_parser::OutlineBuilder for Builder {
     fn move_to(&mut self, x: f32, y: f32) {
+        let x = x * self.scale;
+        let y = y * self.scale;
         self.expand_bbox(x, y);
         // If we are moving after drawing a boundary, loop back to the start.
         // This ensures we have a closed loop.
@@ -215,19 +211,25 @@ impl ttf_parser::OutlineBuilder for Builder {
     }
 
     fn line_to(&mut self, x: f32, y: f32) {
+        let x = x * self.scale;
+        let y = y * self.scale;
         self.expand_bbox(x, y);
         // A straight line cubic can be made with two control points on said line.
         let target = Point { x, y };
         let m = lerp(self.position, target, 0.33);
         self.beziers.push(
             // Translate the Bézier curve relative to the cursor.
-            Quadratic(self.position, m, target) + self.cursor,
+            Quadratic(self.position, m, target)
         );
         self.position = target;
     }
 
     /// Insert a Bézier curve to (x, y)
     fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
+        let x = x * self.scale;
+        let y = y * self.scale;
+        let x1 = x1 * self.scale;
+        let y1 = y1 * self.scale;
         self.expand_bbox(x1, y1);
         self.expand_bbox(x, y);
         self.beziers.push(
@@ -236,7 +238,7 @@ impl ttf_parser::OutlineBuilder for Builder {
                 self.position,
                 Point { x: x1, y: y1 }, // Control point
                 Point { x, y },
-            ) + self.cursor,
+            )
         );
 
         self.position = Point { x, y };

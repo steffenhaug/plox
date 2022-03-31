@@ -4,24 +4,37 @@ out vec4 color;
 
 in PASS_TO_FRAGMENT_SHADER
 {
-    vec2 uv;
+    vec2  uv;
     float du;
     float dv;
+    flat uint glyph;
 };
 
 
+/// A quadratic Bézier curve.
 struct Quadratic {
-    float x0; // Control point #1
+    float x0; /* Control point #1 */
     float y0;
-    float x1; // Control point #2
+    float x1; /* Control point #2 */
     float y1;
-    float x2; // Control point #3
+    float x2; /* Control point #3 */
     float y2;
 };
 
 layout(std430, binding = 0) buffer beziers
 {
     Quadratic curves[];
+};
+
+/// A Glyph is just a range in the Bézier curve array.
+struct Glyph {
+    uint start;
+    uint end;
+};
+
+layout(std430, binding = 1) buffer LUT
+{
+    Glyph atlas[];
 };
 
 bool approx(float x, float y) {
@@ -58,8 +71,11 @@ vec2 solve(float c, float b, float a) {
 
 int wn(vec2 uv) {
     int w = 0;
+    
+    uint start = atlas[glyph].start;
+    uint end   = atlas[glyph].end;
 
-    for (int i = 0; i < curves.length(); i++) {
+    for (uint i = start; i < end; i++) {
         // Get the control points for the Bézier curve with shifted y.
         float y0 = curves[i].y0 - uv.y;
         float y1 = curves[i].y1 - uv.y;
@@ -154,6 +170,6 @@ float sample_single(vec2 uv) {
 }
 
 void main() {
-    float ms = sample_MSAAx16(uv+0.025);
+    float ms = sample_MSAAx16(uv);
     color = vec4(1.0-ms, 1.0-ms, 1.0-ms, 1.0);
 }

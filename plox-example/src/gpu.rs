@@ -3,7 +3,7 @@
 use crate::shader::{Shader, UniformMat4};
 use crate::State;
 use gl::types::*;
-use plox::spline::Quadratic;
+use plox::atlas::Atlas;
 use std::ptr;
 
 pub struct Vao<const N: u32> {
@@ -34,10 +34,9 @@ pub trait Render {
 
 pub struct TextRenderer {
     shader: Shader,
+    vao: Vao<3>,
     model_matrix_u: UniformMat4,
     proj_matrix_u: UniformMat4,
-    vao: Vao<2>,
-    quads: u32,
 }
 
 impl Render for TextRenderer {
@@ -46,7 +45,7 @@ impl Render for TextRenderer {
         self.shader.bind();
 
         let m: glm::Mat4 = glm::translation(&glm::vec3(390.0, 390.0, 0.0))
-            * glm::scaling(&glm::vec3(10.0, 10.0, 0.0));
+            * glm::scaling(&glm::vec3(100.0, 100.0, 0.0));
 
         // Compute projection matrix.
         let (w, h) = state.win_dims;
@@ -56,15 +55,15 @@ impl Render for TextRenderer {
         gl::UniformMatrix4fv(self.model_matrix_u.0, 1, 0, m.as_ptr());
         gl::UniformMatrix4fv(self.proj_matrix_u.0, 1, 0, p.as_ptr());
 
-        // Text is always rendered on quads; a quad has 6 vertices.
-        let n_elements = 6 * self.quads;
-
+        let bef = std::time::Instant::now();
         gl::DrawElements(
             gl::TRIANGLES,
-            n_elements as GLsizei,
+            6,
             gl::UNSIGNED_INT,
             ptr::null(),
         );
+        let aft = std::time::Instant::now();
+        println!("Draw call time = {}ms", (aft - bef).as_millis());
     }
 }
 
@@ -74,60 +73,75 @@ impl TextRenderer {
         let model_matrix_u = shader.uniform_mat4("model");
         let proj_matrix_u = shader.uniform_mat4("proj");
 
-        // Scale and translage the spline.
-        // This REALLY needs some work lmao
-        let input = "\u{2207}\u{03B1} = \u{222B}\u{1D453}\u{2009}d\u{03BC}";
-        let before = std::time::Instant::now();
-        let text = plox::shaping::shape(input, &plox::font::LM_MATH);
-        let after = std::time::Instant::now();
-        println!("Shaping time: {}ms", (after - before).as_millis());
+        let bef = std::time::Instant::now();
+        let atlas = Atlas::new(&plox::font::LM_MATH);
+        let aft = std::time::Instant::now();
+        println!("Atlas creation time = {}ms", (aft - bef).as_millis());
 
-        // 800 tall window
+        // send atlas to the GPU
+        let beziers_buf = Ssbo::gen();
+        beziers_buf.data(&atlas.outlines);
+        beziers_buf.bind_base(0);
+
+        let lut_buf = Ssbo::gen();
+        lut_buf.data(&atlas.lut);
+        lut_buf.bind_base(1);
+
         //
+        // create vertex array
+        //
+        let bef = std::time::Instant::now();
+        let text = plox::shaping::shape("\u{222B}", &plox::font::LM_MATH);
+        let aft = std::time::Instant::now();
+        println!("Shaping and outlining time = {}ms", (aft - bef).as_millis());
+        dbg!(&text);
 
-        let bbox = text.bbox();
-
-        let v: [(f32, f32); 4] = [
-            (bbox.x0, bbox.y0),
-            (bbox.x1, bbox.y0),
-            (bbox.x1, bbox.y1),
-            (bbox.x0, bbox.y1),
-        ];
-
-        let data = text.strokes().cloned().collect::<Vec<Quadratic>>();
-
-        let i: [u32; 6] = [
-            0, 1, 2, /* first triangle */
-            0, 2, 3, /* second triangle */
-        ];
-
-        let vao = Vao::<2>::gen();
+        let vao = Vao::<3>::gen();
         vao.enable_attrib_arrays();
 
+        let v = &text[0];
+        dbg!(&atlas.lut[0]);
+        dbg!(&atlas.lut.len());
+        dbg!(v.glyph_id as GLuint);
+
         let verts = Vbo::gen();
-        verts.data(&v);
+        verts.data(&[
+            (v.bbox.x0, v.bbox.y0),
+            (v.bbox.x1, v.bbox.y0),
+            (v.bbox.x1, v.bbox.y1),
+            (v.bbox.x0, v.bbox.y1),
+        ]);
         vao.attrib_ptr(0, 2, gl::FLOAT);
 
         let uvs = Vbo::gen();
-        uvs.data(&v);
+        uvs.data(&[
+            (v.bbox.x0, v.bbox.y0),
+            (v.bbox.x1, v.bbox.y0),
+            (v.bbox.x1, v.bbox.y1),
+            (v.bbox.x0, v.bbox.y1),
+        ]);
         vao.attrib_ptr(1, 2, gl::FLOAT);
 
-        let ibo = Ibo::gen();
-        ibo.data(&i);
+        let glyphs = Vbo::gen();
+        glyphs.data(&[
+            v.glyph_id as GLuint,
+            v.glyph_id as GLuint,
+            v.glyph_id as GLuint,
+            v.glyph_id as GLuint,
+        ]);
+        gl::VertexAttribIPointer(2, 1, gl::UNSIGNED_INT, 0, ptr::null());
 
-        let before = std::time::Instant::now();
-        let ssbo = Ssbo::gen();
-        ssbo.data(&data[..]);
-        ssbo.bind_base(0);
-        let after = std::time::Instant::now();
-        println!("SSBO load time: {}ms", (after - before).as_millis());
+        let ibo = Ibo::gen();
+        ibo.data(&[
+            0, 1, 2, /* first triangle */
+            0, 2, 3, /* second triangle */
+        ]);
 
         TextRenderer {
             shader,
             vao,
             model_matrix_u,
             proj_matrix_u,
-            quads: 1,
         }
     }
 }

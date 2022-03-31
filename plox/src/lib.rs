@@ -8,6 +8,7 @@
 pub mod spline;
 pub mod shaping;
 pub mod font;
+pub mod atlas;
 pub mod polynomial;
 
 pub use polynomial::Poly;

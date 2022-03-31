@@ -1,9 +1,17 @@
 //! Text shaping!
-use crate::spline::Spline;
+use crate::spline::Rect;
 use rustybuzz::{self as buzz, Face, GlyphInfo, GlyphPosition, UnicodeBuffer};
-use ttf_parser::GlyphId;
+use ttf_parser as ttf;
 
-pub fn shape<S>(text: S, face: &Face) -> Spline
+#[derive(Debug)]
+pub struct Glyph {
+    pub glyph_id: u32,
+    pub bbox: Rect,
+    pub x: f32,
+    pub y: f32,
+}
+
+pub fn shape<S>(text: S, face: &Face) -> Vec<Glyph>
 where
     S: AsRef<str>,
 {
@@ -16,41 +24,43 @@ where
     let after = std::time::Instant::now();
     println!("Shaping time: {}ms", (after - before).as_millis());
 
-    let before = std::time::Instant::now();
-    let mut spline = Spline::builder();
+    let mut x = 0.0;
+    let mut y = 0.0;
+    let mut glyphs = vec![];
+    let em = face.units_per_em() as f32;
 
-    // For all glyphs in the buffer,
-    let n = glyph_buffer.len();
-    for i in 0..n {
-        // Advances: How much to advance after drawing the glyph
-        // Offset: How much to offset before drawing the glyph.
-        //   https://harfbuzz.github.io/a-simple-shaping-example.html
-        // The above link has a code example of how to use this info.
-        // Most "normal" characters have offset=0, so I'll ignore for
-        // now.
+    for i in 0..glyph_buffer.len() {
         let GlyphInfo { glyph_id, .. } = glyph_buffer.glyph_infos()[i];
-        let glyph = GlyphId(glyph_id as u16); // Guaranteed to fit.
 
+        // Advances: How much to advance *after* drawing the glyph
         let GlyphPosition {
             x_advance,
             y_advance,
             ..
         } = glyph_buffer.glyph_positions()[i];
 
-        // Now, given a glyph and its (x,y)-advance, we can draw it:
-        face.outline_glyph(glyph, &mut spline);
-        spline.advance(x_advance as f32, y_advance as f32);
+        // Kerning information in units of 1em.
+        let x_advance = x_advance as f32 / em;
+        let y_advance = y_advance as f32 / em;
+
+        let bbox = face
+            .glyph_bounding_box(ttf::GlyphId(glyph_id as u16))
+            // I don't think it is actually safe to do this. fix later.
+            .unwrap();
+
+        // Glyph bounding box in units of 1em.
+        let x0 = f32::min(bbox.x_min as f32, bbox.x_max as f32) / em;
+        let x1 = f32::max(bbox.x_min as f32, bbox.x_max as f32) / em;
+        let y0 = f32::min(bbox.y_min as f32, bbox.y_max as f32) / em;
+        let y1 = f32::max(bbox.y_min as f32, bbox.y_max as f32) / em;
+        let bbox = Rect { x0, x1, y0, y1 };
+
+        glyphs.push(Glyph { glyph_id, bbox, x, y });
+
+        // Advance the cursor in preparation for the next glyph.
+        x += x_advance;
+        y += y_advance;
     }
 
-    let s = spline.build();
-
-    let em = face.units_per_em() as f32;
-    let s = s.scale(1.0 / em);
-
-    let after = std::time::Instant::now();
-    println!("Outlining time: {}ms", (after - before).as_millis());
-
-    dbg!(face.number_of_glyphs());
-
-    s
+    glyphs
 }
