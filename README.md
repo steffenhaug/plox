@@ -82,3 +82,18 @@ https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/fwidth.xhtml
 
 ## rust-libraries
 rustybuzz - text shaping. not sure if i need this if im gonna typeset math myself but anyway
+
+
+# performance
+It is pretty good.
+creating font atlases for large fonts takes milliseconds, courtesy of rayon.
+rasterization is expensive, but there is still room for optimizing the shader, its
+a very naïve multisampling in the current iteration.
+Specifically, ~4x speedup should theoretically be possible just by reusing roots.
+I'm currently re-calculating the bounding box of glyphs when shaping, even though this data is
+cached in the font atlas, because it is convenient. There is some time to gain here.
+
+```
+valgrind --tool=callgrind --dump-instr=yes --collect-jumps=yes --simulate-cache=yes target/release/plox-example
+```
+

@@ -43,42 +43,28 @@ pub struct TextRenderer {
 
 impl Render for TextRenderer {
     unsafe fn invoke(&self, state: &State) {
-        let bef = std::time::Instant::now();
         self.vao.bind();
-        let aft = std::time::Instant::now();
-        println!("Bind VAO time = {}ms", (aft - bef).as_millis());
-
-        let bef = std::time::Instant::now();
         self.shader.bind();
-        let aft = std::time::Instant::now();
-        println!("Bind Shader time = {}ms", (aft - bef).as_millis());
 
         let (mx, my) = state.mouse.unwrap_or((400.0, 400.0));
         let m: glm::Mat4 = glm::translation(&glm::vec3(mx, my, 0.0))
-            * glm::rotation(3.1415/3.0, &glm::vec3(0.0, 0.0, 1.0))
-            * glm::scaling(&glm::vec3(1.0, 1.0, 0.0));
+            * glm::rotation(3.1415 / 3.0, &glm::vec3(0.0, 0.0, 1.0))
+            * glm::scaling(&glm::vec3(75.0, 75.0, 0.0));
 
         // Compute projection matrix.
         let (w, h) = state.win_dims;
         let p: glm::Mat4 = glm::ortho(0.0, w as f32, 0.0, h as f32, 0.0, 1000.0);
 
         // Todo: abstract this (send matrices to the shader program)
-        let bef = std::time::Instant::now();
         gl::UniformMatrix4fv(self.model_matrix_u.0, 1, 0, m.as_ptr());
         gl::UniformMatrix4fv(self.proj_matrix_u.0, 1, 0, p.as_ptr());
-        let aft = std::time::Instant::now();
-        println!("Uniform upload time = {}ms", (aft - bef).as_millis());
 
-        let bef = std::time::Instant::now();
         gl::DrawElements(
             gl::TRIANGLES,
             6 * self.n_quads as GLint,
             gl::UNSIGNED_INT,
             ptr::null(),
         );
-        gl::Finish(); /* profiling */
-        let aft = std::time::Instant::now();
-        println!("Draw call time = {}ns", (aft - bef).as_nanos());
     }
 }
 
@@ -156,9 +142,6 @@ impl TextRenderer {
         beziers_buf.data(&atlas.outlines);
         beziers_buf.bind_base(0);
 
-        dbg!(&atlas.outlines.len());
-        dbg!(gl_buf_size(&atlas.outlines));
-
         let lut_buf = Ssbo::gen();
         lut_buf.data(&atlas.lut);
         lut_buf.bind_base(1);
@@ -172,7 +155,6 @@ impl TextRenderer {
         let text = plox::shaping::shape(input, &plox::font::LM_MATH);
         let aft = std::time::Instant::now();
         println!("Shaping time = {}ms", (aft - bef).as_millis());
-        dbg!(&atlas.lut[690]);
 
         let vao = Vao::<3>::gen();
         vao.enable_attrib_arrays();
@@ -213,12 +195,14 @@ impl TextRenderer {
 // Again, these are extremely thin wrappers.
 
 impl<const N: u32> Vao<N> {
+    #[inline(always)]
     unsafe fn gen() -> Self {
         let mut array = 0;
         gl::GenVertexArrays(1, &mut array);
         Vao { array }
     }
 
+    #[inline(always)]
     unsafe fn enable_attrib_arrays(&self) {
         self.bind();
         for i in 0..N {
@@ -226,6 +210,7 @@ impl<const N: u32> Vao<N> {
         }
     }
 
+    #[inline(always)]
     unsafe fn attrib_ptr(&self, index: GLuint, size: GLsizei, ty: GLenum) {
         self.bind();
         let stride = 0; // Tightly packed atributes.
@@ -234,6 +219,7 @@ impl<const N: u32> Vao<N> {
         gl::VertexAttribPointer(index, size, ty, normalized, stride, pointer);
     }
 
+    #[inline(always)]
     unsafe fn attrib_iptr(&self, index: GLuint, size: GLsizei, ty: GLenum) {
         self.bind();
         let stride = 0; // Tightly packed atributes.
@@ -241,22 +227,26 @@ impl<const N: u32> Vao<N> {
         gl::VertexAttribIPointer(index, size, ty, stride, pointer);
     }
 
+    #[inline(always)]
     unsafe fn bind(&self) {
         gl::BindVertexArray(self.array);
     }
 }
 
 impl Vbo {
+    #[inline(always)]
     unsafe fn gen() -> Vbo {
         let mut buffer = 0;
         gl::GenBuffers(1, &mut buffer);
         Vbo { buffer }
     }
 
+    #[inline(always)]
     unsafe fn bind(&self) {
         gl::BindBuffer(gl::ARRAY_BUFFER, self.buffer);
     }
 
+    #[inline(always)]
     unsafe fn data<T>(&self, vertices: &[T]) {
         self.bind();
         gl::BufferData(
@@ -269,16 +259,19 @@ impl Vbo {
 }
 
 impl Ibo {
+    #[inline(always)]
     unsafe fn gen() -> Ibo {
         let mut buffer = 0;
         gl::GenBuffers(1, &mut buffer);
         Ibo { buffer }
     }
 
+    #[inline(always)]
     unsafe fn bind(&self) {
         gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.buffer);
     }
 
+    #[inline(always)]
     unsafe fn data(&self, indices: &[u32]) {
         self.bind();
         gl::BufferData(
@@ -291,16 +284,19 @@ impl Ibo {
 }
 
 impl Ssbo {
+    #[inline(always)]
     unsafe fn gen() -> Self {
         let mut buffer = 0;
         gl::GenBuffers(1, &mut buffer);
         Ssbo { buffer }
     }
 
+    #[inline(always)]
     unsafe fn bind(&self) {
         gl::BindBuffer(gl::SHADER_STORAGE_BUFFER, self.buffer);
     }
 
+    #[inline(always)]
     unsafe fn data<T>(&self, ssbo: &[T]) {
         self.bind();
         gl::BufferData(
@@ -311,6 +307,7 @@ impl Ssbo {
         );
     }
 
+    #[inline(always)]
     unsafe fn bind_base(&self, index: u32) {
         gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, index, self.buffer);
     }

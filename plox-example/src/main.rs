@@ -31,15 +31,7 @@ pub struct State {
 unsafe fn render(state: &State) {
     gl::ClearColor(1.0, 1.0, 1.0, 1.0);
     gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-
-    let before = std::time::Instant::now();
     state.text_renderer.invoke(state);
-    let after = std::time::Instant::now();
-    println!(
-        "Text Renderer invokation time = {}ms",
-        (after - before).as_millis()
-    );
-
 }
 
 impl State {

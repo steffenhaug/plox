@@ -20,10 +20,7 @@ where
     let mut unicode_buffer = UnicodeBuffer::new();
     unicode_buffer.push_str(text.as_ref());
 
-    let before = std::time::Instant::now();
     let glyph_buffer = buzz::shape(face, &[], unicode_buffer);
-    let after = std::time::Instant::now();
-    println!("Shaping time: {}ms", (after - before).as_millis());
 
     let mut x = 0.0;
     let mut y = 0.0;

@@ -640,3 +640,8 @@ text would often be shaped ahead of time so this isn't _really_ anything to opti
 And it renders all this text -- around 37000 characters at the time of writing --
 so fast that i had to change the profiling to use nanoseconds: Around 400000ns,
 or 0.4ms.
+Oh and that's with debug optimizations.
+With `--release`, outlining takes 10ms, shaping takes 26ms (!).
+A draw call still takes 350000ns, but this should be mostly GPU-bound anyways since
+the CPU is doing almst nothing, so this isn't surprising, and this will mostly depend
+on how many fragmetns actually need shading in.
