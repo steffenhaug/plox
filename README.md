@@ -1,3 +1,4 @@
+graphics project for tdt4230
 # gpu-accelerated plotting.
 (plox = plot + oxidize or some shit)
 

@@ -12,8 +12,11 @@
 //!
 //! This does not provide an OpenGL context. The client should use something like glutin to create
 //! a context before utilizing functionality from this module.
+//!
+//! The abstraction provided is limited: All it provides is newtypes for IDs and methods that
+//! supply some default parameters to avoid misuse.
 pub mod shader;
-pub mod text;
+pub mod text; // text rendering
 
 use gl::types::*;
 use std::ptr;
