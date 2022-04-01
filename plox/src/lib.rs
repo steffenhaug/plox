@@ -5,11 +5,15 @@
 //!
 //! There is no OpenGL stuff here, because i want to have the possibility to
 //! switch to Vulkan if i ever seriously intend to maintain this for real.
+extern crate nalgebra_glm as glm;
+extern crate ttf_parser as ttf;
+
 pub mod spline;
 pub mod shaping;
 pub mod font;
 pub mod atlas;
 pub mod polynomial;
+pub mod gpu;
 
 pub use polynomial::Poly;
 pub use spline::{Point, Quadratic, Spline};

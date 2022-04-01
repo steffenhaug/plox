@@ -1,16 +1,22 @@
-//! Shader loading, compiling and linking.
+//! Shader abstraction.
 use gl::{types::*, FRAGMENT_SHADER, VERTEX_SHADER};
 use std::ffi::CString;
 use std::ptr;
 
-const SHADER_SRC_FRAG: &str = include_str!("frag.glsl");
-const SHADER_SRC_VERT: &str = include_str!("vert.glsl");
-
+/// A shader is just a wrapper around its program ID.
 pub struct Shader {
     pub shader: GLuint,
 }
 
+//
+// Uniform types.
+//
 pub struct UniformMat4(pub GLint);
+
+// Shaders programs:
+// I just include them in the binary, so the binary is portable.
+const SHADER_SRC_FRAG: &str = include_str!("text.frag.glsl");
+const SHADER_SRC_VERT: &str = include_str!("text.vert.glsl");
 
 impl Shader {
     /// A shader dedicated to rendering text.

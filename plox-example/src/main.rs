@@ -1,10 +1,10 @@
 extern crate nalgebra_glm as glm;
-
-mod gpu;
-mod shader;
 mod util;
 
-use crate::gpu::{Render, TextRenderer};
+use plox::gpu::{
+    text::{TextRenderer, TextRendererState},
+    Render,
+};
 
 use glutin::event::{ElementState::*, Event, KeyboardInput, VirtualKeyCode::*, WindowEvent};
 use glutin::event_loop::ControlFlow;
@@ -25,13 +25,16 @@ pub struct State {
 
 /// Performs drawing operations.
 /// Unsafe because the responsibility of not performing undefined
-/// OpenGL behavious lies on the caller. So the state needs to not
+/// OpenGL behaviour lies on the caller. So the state needs to not
 /// have invalid handles, the right GL context needs to be active,
 /// and so on.
 unsafe fn render(state: &State) {
     gl::ClearColor(1.0, 1.0, 1.0, 1.0);
     gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-    state.text_renderer.invoke(state);
+    state.text_renderer.invoke(&TextRendererState {
+        win_dims: state.win_dims,
+        mouse: state.mouse,
+    });
 }
 
 impl State {
@@ -40,7 +43,7 @@ impl State {
     /// which means you need a valid GL context, which makes this unsafe.
     unsafe fn new() -> State {
         let before = std::time::Instant::now();
-        let text_renderer = gpu::TextRenderer::new();
+        let text_renderer = TextRenderer::new();
         let after = std::time::Instant::now();
         println!(
             "Renderer initialization time: {}ms",

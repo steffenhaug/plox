@@ -1,7 +1,6 @@
 //! Text shaping!
 use crate::spline::Rect;
 use rustybuzz::{self as buzz, Face, GlyphInfo, GlyphPosition, UnicodeBuffer};
-use ttf_parser as ttf;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Glyph {
