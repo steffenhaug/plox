@@ -169,6 +169,6 @@ float sample_single(vec2 uv, uint start, uint end) {
 void main() {
     uint start = atlas[glyph].start;
     uint end = atlas[glyph].end;
-    float alpha = sample_single(uv, start, end);
+    float alpha = sample_MSAAx16(uv, start, end);
     color = vec4(0.0, 0.0, 0.0, alpha);
 }

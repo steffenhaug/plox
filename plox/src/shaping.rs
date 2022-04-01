@@ -4,7 +4,8 @@ use rustybuzz::{self as buzz, Face, GlyphInfo, GlyphPosition, UnicodeBuffer};
 use ttf_parser as ttf;
 
 #[derive(Debug, Clone, Copy)]
-pub struct Glyph { // bad name. glyph is abstract, not at a specific position
+pub struct Glyph {
+    // bad name. glyph is abstract, not at a specific position
     pub glyph_id: u32,
     pub bbox: Rect,
     pub x: f32,
@@ -43,19 +44,38 @@ where
         let x_advance = x_advance as f32 / em;
         let y_advance = y_advance as f32 / em;
 
-        let bbox = face
-            .glyph_bounding_box(ttf::GlyphId(glyph_id as u16))
-            // NOT SAFE! Some characters dont have bounding boxes.
-            .unwrap();
+        let bbox = face.glyph_bounding_box(ttf::GlyphId(glyph_id as u16));
 
-        // Glyph bounding box in units of 1em.
-        let x0 = f32::min(bbox.x_min as f32, bbox.x_max as f32) / em;
-        let x1 = f32::max(bbox.x_min as f32, bbox.x_max as f32) / em;
-        let y0 = f32::min(bbox.y_min as f32, bbox.y_max as f32) / em;
-        let y1 = f32::max(bbox.y_min as f32, bbox.y_max as f32) / em;
-        let bbox = Rect { x0, x1, y0, y1 };
+        // Not all glyphs actually have bounding boxes.
+        if let Some(b) = bbox {
+            // Glyph bounding box in units of 1em.
+            let x0 = f32::min(b.x_min as f32, b.x_max as f32) / em;
+            let x1 = f32::max(b.x_min as f32, b.x_max as f32) / em;
+            let y0 = f32::min(b.y_min as f32, b.y_max as f32) / em;
+            let y1 = f32::max(b.y_min as f32, b.y_max as f32) / em;
+            let bbox = Rect { x0, x1, y0, y1 };
 
-        glyphs.push(Glyph { glyph_id, bbox, x, y });
+            glyphs.push(Glyph {
+                glyph_id,
+                bbox,
+                x,
+                y,
+            });
+        } else {
+            let bbox = Rect {
+                x0: 0.0,
+                x1: 0.0,
+                y0: 0.0,
+                y1: 0.0,
+            };
+
+            glyphs.push(Glyph {
+                glyph_id,
+                bbox,
+                x,
+                y,
+            });
+        }
 
         // Advance the cursor in preparation for the next glyph.
         x += x_advance;

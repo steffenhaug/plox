@@ -632,17 +632,11 @@ atlas) from glyph-id to a range of indexes in the font atlas describing which cu
 said glyph.
 
 ## So how well did this go?
-First, the good news: Outlining the entire font atlas for Latin Modern Math (~4000 symbols,
-remember) now takes 70ms. Without parallelization ~200ms, but the difference here will depend
-on hardware (i have 4 cores).
-Shaping the entire text of this report takes ~300ms -- roughly the same as before obviously, it is
-still shaping the same text.
-Now, for the bad news: Rendering a frame takes 300ms.
-Even though for each fragment we are solving exactly the same number or fewer polynimials, draw
-calls take ages. The only _real_ change in the shader is that 1. the SSBO is _way_ larger,
-and 2. we are accessing two different SSBOs.
-All the curves are accessed sequentially from the SSBO, at least in principle.
-One funny thing i noticed, is that there is a _huge_ jump in performance from solving
-11 polynomials to solving 12 -- a jump from 10ms per draw call to over 100ms.
-This spike leads me to suspect some form of cache challenge.
-This spike is not present when single-sampling.
+Outlining the entire font atlas for Latin Modern Math takes 47ms, helped _greatly_
+by the wonderful `rayon` crate.
+Shaping the text still take ~300ms, the same as before -- we are shaping the same text
+after all, so this is no surprise. Remember that for workloads as large as these, the
+text would often be shaped ahead of time so this isn't _really_ anything to optimize.
+And it renders all this text -- around 37000 characters at the time of writing --
+so fast that i had to change the profiling to use nanoseconds: Around 400000ns,
+or 0.4ms.

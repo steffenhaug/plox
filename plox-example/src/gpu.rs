@@ -53,8 +53,10 @@ impl Render for TextRenderer {
         let aft = std::time::Instant::now();
         println!("Bind Shader time = {}ms", (aft - bef).as_millis());
 
-        let m: glm::Mat4 = glm::translation(&glm::vec3(100.0, 390.0, 0.0))
-            * glm::scaling(&glm::vec3(120.0, 120.0, 0.0));
+        let (mx, my) = state.mouse.unwrap_or((400.0, 400.0));
+        let m: glm::Mat4 = glm::translation(&glm::vec3(mx, my, 0.0))
+            * glm::rotation(3.1415/3.0, &glm::vec3(0.0, 0.0, 1.0))
+            * glm::scaling(&glm::vec3(1.0, 1.0, 0.0));
 
         // Compute projection matrix.
         let (w, h) = state.win_dims;
@@ -76,7 +78,7 @@ impl Render for TextRenderer {
         );
         gl::Finish(); /* profiling */
         let aft = std::time::Instant::now();
-        println!("Draw call time = {}ms", (aft - bef).as_millis());
+        println!("Draw call time = {}ns", (aft - bef).as_nanos());
     }
 }
 
@@ -164,9 +166,10 @@ impl TextRenderer {
         //
         // create vertex array
         //
-        let input = "\u{2207}\u{03B1}=\u{222B}\u{1D453}d\u{03BC}";
+        let input = "\u{2207}\u{03B1} = \u{222B}\u{1D453}d\u{03BC}";
+        let input = include_str!("../../report.md");
         let bef = std::time::Instant::now();
-        let text = plox::shaping::shape("LLLLLLL", &plox::font::LM_MATH);
+        let text = plox::shaping::shape(input, &plox::font::LM_MATH);
         let aft = std::time::Instant::now();
         println!("Shaping time = {}ms", (aft - bef).as_millis());
         dbg!(&atlas.lut[690]);

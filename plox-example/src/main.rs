@@ -19,6 +19,7 @@ pub const SCREEN_H: u32 = 800;
 /// Contains everything that is used to feed data to the GPU.
 pub struct State {
     win_dims: (u32, u32),
+    mouse: Option<(f32, f32)>,
     text_renderer: TextRenderer,
 }
 
@@ -56,6 +57,7 @@ impl State {
 
         State {
             win_dims: (SCREEN_W, SCREEN_H),
+            mouse: None,
             text_renderer,
         }
     }
@@ -187,6 +189,13 @@ fn main() {
                     }
                     (_, _) => (),
                 },
+                WindowEvent::CursorMoved { position, .. } => {
+                    // Translate into normal (x, y) coordinates.
+                    let x = position.x as f32;
+                    let y = state.win_dims.1 as f32 - position.y as f32;
+                    state.mouse = Some((x, y));
+                    ctx.window().request_redraw();
+                }
                 _ => (),
             },
             _ => (),
