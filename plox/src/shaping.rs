@@ -5,7 +5,7 @@ use rustybuzz::{self as buzz, Face, GlyphInfo, GlyphPosition, UnicodeBuffer};
 #[derive(Debug, Clone, Copy)]
 pub struct Glyph {
     // bad name. glyph is abstract, not at a specific position
-    pub glyph_id: u32,
+    pub glyph_id: usize,
     pub bbox: Rect,
     pub x: f32,
     pub y: f32,
@@ -52,7 +52,7 @@ where
             let bbox = Rect { x0, x1, y0, y1 };
 
             glyphs.push(Glyph {
-                glyph_id,
+                glyph_id: glyph_id as usize,
                 bbox,
                 x,
                 y,
@@ -66,7 +66,7 @@ where
             };
 
             glyphs.push(Glyph {
-                glyph_id,
+                glyph_id: glyph_id as usize,
                 bbox,
                 x,
                 y,

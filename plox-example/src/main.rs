@@ -29,12 +29,16 @@ pub struct State {
 /// have invalid handles, the right GL context needs to be active,
 /// and so on.
 unsafe fn render(state: &State) {
-    gl::ClearColor(1.0, 1.0, 1.0, 1.0);
+    gl::ClearColor(1.0, 0.8, 0.5, 1.0);
     gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+    let b = std::time::Instant::now();
     state.text_renderer.invoke(&TextRendererState {
         win_dims: state.win_dims,
         mouse: state.mouse,
     });
+    gl::Finish();
+    let a = std::time::Instant::now();
+    println!("Draw call time = {}ns", (a - b).as_nanos());
 }
 
 impl State {
@@ -98,7 +102,6 @@ fn main() {
     // OpenGL Initializerion.
     //
     unsafe {
-        gl::Enable(gl::CULL_FACE);
         gl::Disable(gl::MULTISAMPLE);
         gl::Enable(gl::BLEND);
         gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
@@ -189,7 +192,7 @@ fn main() {
                     let x = position.x as f32;
                     let y = state.win_dims.1 as f32 - position.y as f32;
                     state.mouse = Some((x, y));
-                    ctx.window().request_redraw();
+                    // ctx.window().request_redraw();
                 }
                 _ => (),
             },

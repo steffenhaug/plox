@@ -7,7 +7,7 @@ use ttf_parser as ttf;
 pub struct Atlas {
     pub outlines: Vec<Quadratic>,
     pub bboxes: Vec<Rect>,
-    pub lut: Vec<(u32, u32)>,
+    pub lut: Vec<(usize, usize)>,
 }
 
 impl Atlas {
@@ -40,7 +40,7 @@ impl Atlas {
 
             outlines.extend(spline.strokes());
             bboxes.push(*spline.bbox());
-            lut.push((start as u32, end as u32));
+            lut.push((start, end));
         }
 
         Atlas {

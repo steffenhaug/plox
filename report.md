@@ -645,3 +645,89 @@ With `--release`, outlining takes 10ms, shaping takes 26ms (!).
 A draw call still takes 350000ns, but this should be mostly GPU-bound anyways since
 the CPU is doing almst nothing, so this isn't surprising, and this will mostly depend
 on how many fragmetns actually need shading in.
+
+# A more beautiful algorithm
+This is all well and good, but there is one minor grievance:
+Calculating the winding-number per fragment by solving polynomial equations is
+_a lot_ of work per fragment -- with 16x multisampling and 40 curves this amounts to solving 640
+quadratic equations per fragment.
+First of all, it is really a damn shame that we have to do AA my multisampling when we have a
+perfect analytical representation of the contour, and secondly the fragment shader is doing _all
+the work_.
+Secondly, the work the fragment shader involves doing a bunch of lookups in a lookup table (the
+font atlas) and then using that info to look up once again (in the Bézier curve buffer).
+I'm pretty sure SSBOs live in global GPU memory (although admittedly  I'm not 100% sure of this),
+in which case cache misses will be extremely costly. Thankfully, GPUs have huge caches, and
+an entire curve buffer can almost fit in the GPUs cache, but if we want to use a large number of
+fonts, or if we have other shaders drawing other things, I'm not convinced this is fantastic for
+performance.
+
+There is in fact a more beautiful way to do this, outlined by Evan Wallace in
+[this article on Medium from 2016](https://medium.com/@evanwallace/easy-scalable-text-rendering-on-the-gpu-c3f4d782c5ac).
+The key insight is that you can add a point to your contour, and replace your contour with a bunch
+of small contours that trace a segment of your contour and this auxillary point.
+
+![The contours of $\alpha$ via an auxillary point drawn with transparency and blending.](report/wallace_1.png)
+
+It's not super intuitive without a visual demonstration, but you can see it in the figure above: 
+Fragments that are drawn to an even number of times are _outside_ the contour.
+Wallace suggests drawing with additive blending a value of \sfrac{1}{256}, and then checking
+the the resulting color value $N \mod 2$ is odd.
+This is kind of ugly, since -- as Wallace points out --
+you can't draw shapes that overlap more than 256 times.
+In practice, this isn't much of a problem of course, but its an ugly wart on an otherwise beautiful
+method.
+Wallace mentions flipping the stencil buffer, which would solve this problem, but is quite a lot of
+work to do: Clearing the stencil buffer, enabling and disabling stencil testing, rendering
+a quad to cover it afterwards, and so on.
+There is a simpler way to do this.
+As far as I can tell this is my original idea, albeit essentially a trivial extension of Wallaces
+method. We don't have to blend additively and calculate the value $N \mod 2$ in the end.
+We can actually do the addition $N \mod 2$ as we go by exploiting the fact that addition in this
+group is equivalent to logical XOR, and we can do this easily by enabling `gl::COLOR_LOGIC_OP`,
+and choosing the operator `gl::XOR`. This saves us a lot of "fuckery" (I believe this is the
+technical term) with the OpenGL state.
+
+![](report/xor_fill.png)
+
+Now, clearly we are not done.
+But it is pretty remarkable that the winding number calculation can be entirely done by modular
+arithmetic.
+What remains is filling in the area we failed to account for when we replaced the control point by
+an auxillary point. This sounds like it will be complicated, but it is actually quite straight
+forward, thanks to _yet another_ remarkable feature of Bézier curves: Linear transformations on the
+curve can be done by applying it to the control points.
+The distinction between outside and inside can be done in canonical texture space with the equation
+$u^2 - v < 0$, and is outlined in Loop and Blinns
+[2005 paper](https://www.microsoft.com/en-us/research/wp-content/uploads/2005/01/p1000-loop.pdf).
+![](report/blinn_regions.png)
+
+And as we can see, the outlined regions have two categories: The orange ones in which we need to
+add in more color beyond the glyph as rasterized by the addition algorithm, and the blue regions in
+which color needs to be taken away. Filled regions need to be cleared, and empty regions need to be
+filled. In other words: It is _just another XOR_.
+![](report/xor_outline.png)
+
+Unfortinately, getting anti-aliasing back is going to require some creativity.
+Wallace accomplishes this by drawing the scene multiple times slightly offset, and accumulating 
+samples in the color data. Again, this is a pretty ugly hack.
+Another slight irritation with the XOR-based modular arithmetic is that it works amazingly well for
+binary inputs (white and black) but if you draw text over a colored background, the result is not
+desirable: The glyph will always take the color $\text{RBGA}(1-\text R, 1-\text G, 1-\text B,
+1-\text A)$ relative to the background color.
+We want to use this rasterization _only_ as alpha channel, so we can control the color of the text,
+and we always want to start with alpha zero when we rasterize.
+
+The idea is to solve both these problems in one go:
+We keep a single-color texture in a frame-buffer that we can clear with
+$\text{RGBA}(0, 0, 0, 0)$ and use as a render target for the algorithm above.
+Then we create a new shader, that simply textures a quad with alpha-value from said texture.
+Another benefit of this: The rasterization resolution is independent of the final size of the quad,
+so it will be possible to intentionally create pixelated if that's desired.
+
+![](report/alpha_textured.png)
+
+Here is a demonstration of both of the aforementioned features in action. This is the first
+"low-resolution" figure I didnt't need to manually scale up with GIMP.
+It is also clear, that this color combination would be impossible by XORing the color buffer
+directly, since the color of the $\alpha$ is not the binary complement of the backgorund color.

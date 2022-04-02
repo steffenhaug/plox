@@ -2,17 +2,6 @@ graphics project for tdt4230
 # gpu-accelerated plotting.
 (plox = plot + oxidize or some shit)
 
-
-## notes on text rendering
-there are essentially two options:
-- rasterizing text to a texture, and drawing it on a quad
-    - probably easy to do at load time with external lib
-    - will be less flexible, no dynamic text probably
-- 1 glyph = 1 quad with (bezier?) curves in texture
-    - SIGNIFICANTLY harder
-    - flexible
-
-
 ## tentative progression plan:
 1. ✅font loading (utilize a libraty hopefully) and obtain bezier curves
 2. ✅single-character software rasterizer (write a png or something)
@@ -26,19 +15,23 @@ there are essentially two options:
 7. typesetting of non-character bezier-curve based things (axes, tick marks, etc)
 
 ## immediate to-do list:
-- rendering of multiple text elements
-    - verts need curve index range
-    - TextRenderer needs to manage the curve buffer
-        - does this approach scale? is it more sensible to upload the
-          entire font atlas?
-            pros:
-            - no need to "collect garbage" if text elements are removed
-            - curve buffer doesnt grow for ever if text is added
-            cons:
-            - need to send code points as a uniform with each draw call.
-              this is probably cheap; way more compact than curve data
-
 - profiling, tracing and logging
+- text elements need to know their total bounding box
+  and use this as a reference point for translation
+  either that, or wrap them in a "box" abstraction (ala fbox)
+- design layout system
+    option 1: hard code layouts for integrals etc
+    option 2: generic scaled boxes, overset/underset boxes
+- "latex" parser -> scene graph
+- figure out dynamic text. simple idea: arc<refcell<text>> and store the arc
+  in the renderer
+- line breaking algorithm (i think this is easy) needed for labels if they get long
+    without justification, just group characters separated by space
+        - push the text if it fits
+        - if the text would extend past right margin, reset cursor x to zero and
+          add baseline-skip to cursor y
+- drawing outlines of boxes for debugging
+    - line shader: dashed, dotted, etc
 
 
 
@@ -51,34 +44,40 @@ check if allsorts shaper has better API
 ∫
 
 ## resources
-https://medium.com/@evanwallace/easy-scalable-text-rendering-on-the-gpu-c3f4d782c5ac - winding nuymber / bezier curves
-https://github.com/rougier/freetype-gl - distance fields
+### curves in general + backround math
 https://www.youtube.com/watch?v=aVwxzDHniEw&t=1282s freya bezier curves
-https://jcgt.org/published/0006/02/02/paper.pdf <- this one is great
-https://pcwalton.github.io/2017/02/14/pathfinder
-https://medium.com/@raphlinus/inside-the-fastest-font-renderer-in-the-world-75ae5270c445
-https://www.microsoft.com/en-us/research/wp-content/uploads/2005/01/p1000-loop.pdf
-https://simoncozens.github.io/fonts-and-layout/opentype.html
-
-curve preprocessing:
-https://www.sirver.net/blog/2011/08/23/degree-reduction-of-bezier-curves/
-
-MATH symbols unicode table
-https://unicode-search.net/unicode-namesearch.pl?term=MATHEMATICAL
-
-FontForge to inspect curve data
-
-https://pomax.github.io/bezierinfo/
-
 https://www.youtube.com/watch?v=N-KXStupwsc   MATHOLOGER CUBIC
 
 FONT FORGE FONT RELATED MATH
 https://fontforge.org/docs/techref/pfaeditmath.html
 
+FONT RENDERING PIPELINE
 https://mrandri19.github.io/2019/07/24/modern-text-rendering-linux-overview.html
+
+https://pomax.github.io/bezierinfo/
+
+FontForge to inspect curve data
+
+curve preprocessing:
+https://www.sirver.net/blog/2011/08/23/degree-reduction-of-bezier-curves/
+
+### opengl in general
+https://www.glprogramming.com/red/chapter10.html
 
 maybe this can simplify anti aliasing 
 https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/fwidth.xhtml
+
+### wallaces method
+http://www.glprogramming.com/red/chapter14.html#name13 backround on stencil buffer flippign method
+https://medium.com/@evanwallace/easy-scalable-text-rendering-on-the-gpu-c3f4d782c5ac - winding nuymber / bezier curves
+https://www.microsoft.com/en-us/research/wp-content/uploads/2005/01/p1000-loop.pdf
+https://news.ycombinator.com/item?id=11440599
+
+### font stuff
+https://simoncozens.github.io/fonts-and-layout/opentype.html
+
+MATH symbols unicode table
+https://unicode-search.net/unicode-namesearch.pl?term=MATHEMATICAL
 
 
 ## rust-libraries

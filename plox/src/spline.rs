@@ -322,3 +322,9 @@ impl ops::Mul<Quadratic> for f32 {
         Quadratic(self * rhs.0, self * rhs.1, self * rhs.2)
     }
 }
+
+impl std::convert::From<Point> for (f32, f32) {
+    fn from(p: Point) -> (f32, f32) {
+        (p.x, p.y)
+    }
+}

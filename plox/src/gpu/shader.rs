@@ -12,30 +12,52 @@ pub struct Shader {
 // Uniform types.
 //
 pub struct UniformMat4(pub GLint);
+pub struct UniformVec2(pub GLint);
+pub struct UniformSampler2D(pub GLint);
 
 // Shaders programs:
 // I just include them in the binary, so the binary is portable.
-const SHADER_SRC_FRAG: &str = include_str!("text.frag.glsl");
-const SHADER_SRC_VERT: &str = include_str!("text.vert.glsl");
+const TXT_FILL_FRAG: &str = include_str!("fill.frag.glsl");
+const TXT_FILL_VERT: &str = include_str!("fill.vert.glsl");
+const TXT_OUTLINE_FRAG: &str = include_str!("outline.frag.glsl");
+const TXT_OUTLINE_VERT: &str = include_str!("outline.vert.glsl");
+const TXT_SAMPLE_FRAG: &str = include_str!("sample.frag.glsl");
+const TXT_SAMPLE_VERT: &str = include_str!("sample.vert.glsl");
 
 impl Shader {
-    /// A shader dedicated to rendering text.
-    pub unsafe fn text_shader() -> Shader {
-        // Compile the individual shaders.
-        let vert = Shader::compile(VERTEX_SHADER, SHADER_SRC_VERT);
-        let frag = Shader::compile(FRAGMENT_SHADER, SHADER_SRC_FRAG);
-
-        // Link the shaders.
+    pub unsafe fn fill() -> Shader {
+        let vert = Shader::compile(VERTEX_SHADER, TXT_FILL_VERT);
+        let frag = Shader::compile(FRAGMENT_SHADER, TXT_FILL_FRAG);
         let program = gl::CreateProgram();
         gl::AttachShader(program, vert);
         gl::AttachShader(program, frag);
         Shader::link(program);
-
-        // If we didn't panic, all is well. This GPU memory can be freed.
         gl::DeleteShader(vert);
         gl::DeleteShader(frag);
+        Shader { shader: program }
+    }
 
-        // Return the complete shader program.
+    pub unsafe fn outline() -> Shader {
+        let vert = Shader::compile(VERTEX_SHADER, TXT_OUTLINE_VERT);
+        let frag = Shader::compile(FRAGMENT_SHADER, TXT_OUTLINE_FRAG);
+        let program = gl::CreateProgram();
+        gl::AttachShader(program, vert);
+        gl::AttachShader(program, frag);
+        Shader::link(program);
+        gl::DeleteShader(vert);
+        gl::DeleteShader(frag);
+        Shader { shader: program }
+    }
+
+    pub unsafe fn sample() -> Shader {
+        let vert = Shader::compile(VERTEX_SHADER, TXT_SAMPLE_VERT);
+        let frag = Shader::compile(FRAGMENT_SHADER, TXT_SAMPLE_FRAG);
+        let program = gl::CreateProgram();
+        gl::AttachShader(program, vert);
+        gl::AttachShader(program, frag);
+        Shader::link(program);
+        gl::DeleteShader(vert);
+        gl::DeleteShader(frag);
         Shader { shader: program }
     }
 
@@ -46,6 +68,22 @@ impl Shader {
     pub unsafe fn uniform_mat4(&self, name: &str) -> UniformMat4 {
         if let Some(loc) = self.uniform_location(name) {
             return UniformMat4(loc);
+        }
+
+        panic!("invalid uniform")
+    }
+
+    pub unsafe fn uniform_vec2(&self, name: &str) -> UniformVec2 {
+        if let Some(loc) = self.uniform_location(name) {
+            return UniformVec2(loc);
+        }
+
+        panic!("invalid uniform")
+    }
+
+    pub unsafe fn uniform_sampler2d(&self, name: &str) -> UniformSampler2D {
+        if let Some(loc) = self.uniform_location(name) {
+            return UniformSampler2D(loc);
         }
 
         panic!("invalid uniform")
