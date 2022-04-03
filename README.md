@@ -8,7 +8,7 @@ graphics project for tdt4230
 
 Uses a variant of Evan Wallaces color flipping method but replaces the color accumulation
 techniques for winding number calculation and anti-aliasing by drawing with XOR color logic 
-into a multisample-texture.
+into a multisample α-texture.
 
 
 ## tentative progression plan:
