@@ -67,6 +67,17 @@ https://www.glprogramming.com/red/chapter10.html
 maybe this can simplify anti aliasing 
 https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/fwidth.xhtml
 
+MSAA texture
+https://stackoverflow.com/questions/42878216/opengl-how-to-draw-to-a-multisample-framebuffer-and-then-use-the-result-as-a-n
+
+Specifically Off-screen AA
+https://learnopengl.com/Advanced-OpenGL/Anti-Aliasing
+
+read about Blitting, might be possible to not invoke the shader pipeline
+to copy rasterized texture to the screen
+i think what i _really_ want is a multisampled renderbuffer and not a texture, since
+im literally just copying
+
 ### wallaces method
 http://www.glprogramming.com/red/chapter14.html#name13 backround on stencil buffer flippign method
 https://medium.com/@evanwallace/easy-scalable-text-rendering-on-the-gpu-c3f4d782c5ac - winding nuymber / bezier curves

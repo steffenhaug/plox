@@ -29,7 +29,7 @@ pub struct State {
 /// have invalid handles, the right GL context needs to be active,
 /// and so on.
 unsafe fn render(state: &State) {
-    gl::ClearColor(1.0, 0.8, 0.5, 1.0);
+    gl::ClearColor(1.0, 1.0, 1.0, 1.0);
     gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
     let b = std::time::Instant::now();
     state.text_renderer.invoke(&TextRendererState {
@@ -102,9 +102,8 @@ fn main() {
     // OpenGL Initializerion.
     //
     unsafe {
-        gl::Disable(gl::MULTISAMPLE);
         gl::Enable(gl::BLEND);
-        gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+        gl::BlendFuncSeparate(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA, gl::ONE, gl::ONE_MINUS_SRC_ALPHA);
         gl::Enable(gl::DEBUG_OUTPUT_SYNCHRONOUS);
         gl::DebugMessageCallback(Some(util::debug_callback), ptr::null());
 

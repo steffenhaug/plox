@@ -13,7 +13,8 @@ pub struct Shader {
 //
 pub struct UniformMat4(pub GLint);
 pub struct UniformVec2(pub GLint);
-pub struct UniformSampler2D(pub GLint);
+pub struct UniformVec2i(pub GLint);
+pub struct UniformMultiSampler2D(pub GLint);
 
 // Shaders programs:
 // I just include them in the binary, so the binary is portable.
@@ -81,9 +82,17 @@ impl Shader {
         panic!("invalid uniform")
     }
 
-    pub unsafe fn uniform_sampler2d(&self, name: &str) -> UniformSampler2D {
+    pub unsafe fn uniform_vec2i(&self, name: &str) -> UniformVec2i {
         if let Some(loc) = self.uniform_location(name) {
-            return UniformSampler2D(loc);
+            return UniformVec2i(loc);
+        }
+
+        panic!("invalid uniform")
+    }
+
+    pub unsafe fn uniform_sampler2d(&self, name: &str) -> UniformMultiSampler2D {
+        if let Some(loc) = self.uniform_location(name) {
+            return UniformMultiSampler2D(loc);
         }
 
         panic!("invalid uniform")

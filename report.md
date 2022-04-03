@@ -731,3 +731,19 @@ Here is a demonstration of both of the aforementioned features in action. This i
 "low-resolution" figure I didnt't need to manually scale up with GIMP.
 It is also clear, that this color combination would be impossible by XORing the color buffer
 directly, since the color of the $\alpha$ is not the binary complement of the backgorund color.
+Getting anti-aliasing back is now as simple as replacing the texture in the framebuffer with a
+multisample texture. This has one more enormous benefit: The number of sample points can be tweaked
+by changing a variable, instead of hand-coding a new fragment shader and choosing sample points by
+hand. It's possible to reduce the number of samples from 16, to for example 12, without losing much
+quality at all, especially for large text, so this might be a good thing to let a user tweak.
+
+![Anti aliased glyh rendered with the XOR method and 12x multisampled via OpenGLs built-in multisample
+texture.](report/texture_aa.png)
+
+All in all, this was a lot of work to get nearly identical results, but I think it was worthwhile.
+For one thing, I learned a lot about things I knew nothing about from before, and secondly, this
+algorithm utilizes GPU hardware in a more sensible way:
+Instead of solving hundreds of polynomials per sample, we simply invert colors in a texture.
+And instead of hand-coding a supersampling shader, we can make use of the built-in functionality,
+thus leveraging the hardware more optimally.
+This comes at the cost of some extra draw calls, and some extra state management.
