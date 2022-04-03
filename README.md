@@ -2,6 +2,15 @@ graphics project for tdt4230
 # gpu-accelerated plotting.
 (plox = plot + oxidize or some shit)
 
+(and by plotting i mean falling head first into the text rendering rabbit hole)
+
+(plese send help)
+
+Uses a variant of Evan Wallaces color flipping method but replaces the color accumulation
+techniques for winding number calculation and anti-aliasing by drawing with XOR color logic 
+into a multisample-texture.
+
+
 ## tentative progression plan:
 1. ✅font loading (utilize a libraty hopefully) and obtain bezier curves
 2. ✅single-character software rasterizer (write a png or something)
@@ -32,8 +41,6 @@ graphics project for tdt4230
           add baseline-skip to cursor y
 - drawing outlines of boxes for debugging
     - line shader: dashed, dotted, etc
-
-
 
 ## things
 check if allsorts shaper has better API
