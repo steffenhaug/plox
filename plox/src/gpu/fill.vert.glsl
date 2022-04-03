@@ -2,16 +2,13 @@
 
 in vec2 position;
 
-uniform mat4 p;
-uniform mat4 m;
+uniform mat4 mvp;
 
 /// When drawing the characters mask, we simply replace the
 /// middle control point with an aritrary point, for example
 /// the origin. Then stencil buffer flipping will handle the
 /// rest.
 void main() {
-    mat4 mvp = p * m;
-
     if (gl_VertexID % 3 == 1) {
         gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
     } else {

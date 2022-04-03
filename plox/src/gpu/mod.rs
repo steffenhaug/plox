@@ -52,6 +52,10 @@ pub struct Ssbo {
     buffer: GLuint,
 }
 
+pub struct MultisampleTexture {
+    tex: GLuint,
+}
+
 impl<const N: u32> Vao<N> {
     #[inline(always)]
     pub unsafe fn gen() -> Self {
@@ -181,15 +185,4 @@ pub fn gl_buf_size<T>(val: &[T]) -> GLsizeiptr {
 #[inline(always)]
 pub fn gl_ptr<T>(val: &[T]) -> *const GLvoid {
     val.as_ptr() as *const GLvoid
-}
-
-/// Draw `n` triangles.
-#[inline(always)]
-pub unsafe fn draw_quads(n: u32) {
-    gl::DrawElements(
-        gl::TRIANGLES,
-        6 * n as GLint, /* A quad has 6 indeces. */
-        gl::UNSIGNED_INT,
-        ptr::null(),
-    );
 }

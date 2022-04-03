@@ -3,11 +3,9 @@
 in vec2 position;
 out vec2 uv;
 
-uniform mat4 p;
-uniform mat4 m;
+uniform mat4 mvp;
 
 void main() {
-    mat4 mvp = p * m;
     gl_Position = mvp * vec4(position, 0.0, 1.0);
 
     switch (gl_VertexID % 3) {

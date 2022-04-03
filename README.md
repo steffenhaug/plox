@@ -10,6 +10,10 @@ Uses a variant of Evan Wallaces color flipping method but replaces the color acc
 techniques for winding number calculation and anti-aliasing by drawing with XOR color logic 
 into a multisample α-texture.
 
+Disadvangage: This method generates a _fuck ton_ of vertices.
+Storing the curves in pixel-coordinates would speed up vertex processing, so that's
+a possible optimization.
+
 
 ## tentative progression plan:
 1. ✅font loading (utilize a libraty hopefully) and obtain bezier curves

@@ -173,3 +173,24 @@ impl Shader {
         gl::ValidateProgram(prog);
     }
 }
+
+impl UniformMat4 {
+    #[inline(always)]
+    pub unsafe fn data(&self, mat: &glm::Mat4) {
+        gl::UniformMatrix4fv(self.0, 1, 0, mat.as_ptr());
+    }
+}
+
+impl UniformVec2 {
+    #[inline(always)]
+    pub unsafe fn data(&self, x: f32, y: f32) {
+        gl::Uniform2f(self.0, x, y);
+    }
+}
+
+impl UniformVec2i {
+    #[inline(always)]
+    pub unsafe fn data(&self, x: i32, y: i32) {
+        gl::Uniform2i(self.0, x, y);
+    }
+}

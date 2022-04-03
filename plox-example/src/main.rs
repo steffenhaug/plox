@@ -31,14 +31,10 @@ pub struct State {
 unsafe fn render(state: &State) {
     gl::ClearColor(1.0, 1.0, 1.0, 1.0);
     gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-    let b = std::time::Instant::now();
     state.text_renderer.invoke(&TextRendererState {
         win_dims: state.win_dims,
         mouse: state.mouse,
     });
-    gl::Finish();
-    let a = std::time::Instant::now();
-    println!("Draw call time = {}ns", (a - b).as_nanos());
 }
 
 impl State {
@@ -102,8 +98,16 @@ fn main() {
     // OpenGL Initializerion.
     //
     unsafe {
+        gl::Enable(gl::DEPTH_TEST);
+        gl::DepthFunc(gl::LESS);
+        gl::Disable(gl::MULTISAMPLE);
         gl::Enable(gl::BLEND);
-        gl::BlendFuncSeparate(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA, gl::ONE, gl::ONE_MINUS_SRC_ALPHA);
+        gl::BlendFuncSeparate(
+            gl::SRC_ALPHA,
+            gl::ONE_MINUS_SRC_ALPHA,
+            gl::ONE,
+            gl::ONE_MINUS_SRC_ALPHA,
+        );
         gl::Enable(gl::DEBUG_OUTPUT_SYNCHRONOUS);
         gl::DebugMessageCallback(Some(util::debug_callback), ptr::null());
 
@@ -191,7 +195,7 @@ fn main() {
                     let x = position.x as f32;
                     let y = state.win_dims.1 as f32 - position.y as f32;
                     state.mouse = Some((x, y));
-                    // ctx.window().request_redraw();
+                    ctx.window().request_redraw();
                 }
                 _ => (),
             },

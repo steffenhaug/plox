@@ -2,7 +2,7 @@
 
 out vec2 uv;
 
-// Positions (in units of 1em) of the bottom-left and top-right corner.
+uniform vec2 coverage;
 uniform vec2 bl;
 uniform vec2 tr;
 uniform mat4 p;
@@ -19,12 +19,12 @@ void main() {
     );
 
     const vec2 uv_buffer[6] = vec2[](
-        vec2(0, 0), /* 1st triangle */
-        vec2(1, 0),
-        vec2(1, 1),
-        vec2(0, 0), /* 2nd triangle */
-        vec2(1, 1),
-        vec2(0, 1)
+        vec2(         0,          0), /* 1st triangle */
+        vec2(coverage.x,          0),
+        vec2(coverage.x, coverage.y),
+        vec2(         0,          0), /* 2nd triangle */
+        vec2(coverage.x, coverage.y),
+        vec2(         0, coverage.y)
     );
     
     mat4 mvp = p * m;
