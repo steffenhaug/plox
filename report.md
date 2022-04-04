@@ -751,3 +751,11 @@ Additionally, this algorithm processes _a lot_ more vertices, as a tradeoff for 
 simple fragment processing. On large workloads, such as rendering this entire reports text content (now around
 45000 characters), this can result in spending _a lot_ of time to discard 99% of the vertices if the
 text element is much bigger than the viewport.
+
+![Purple color of a "g" bleeding through the anti-aliased edge of an integral symbol.](report/composite_aa.png)
+
+Another advantage of rasterizing the alpha-texture and "blitting" it into the framebuffer
+with another fragment shader is that, one, we can do arbitrary fragment processing, such as coloring (or
+even texturing) the text. And two, we automatically leverage the GPUs compositing ability so the
+anti-aliasing is "correct" when text is overlapping. Both of these things are demonstrated in the
+figure above.

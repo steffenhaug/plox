@@ -20,7 +20,7 @@ void main() {
 
     alpha /= float(N);
 
-    vec3 C1 = vec3(1.0, 0.0, 1.0);
+    vec3 C1 = vec3(0.7, 0.0, 1.0);
     vec3 C2 = vec3(0.0, 1.0, 1.0);
 
     color = vec4(mix(C1, C2, uv.y), clamp(alpha, 0.0, 1.0));

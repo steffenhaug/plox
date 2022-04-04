@@ -2,24 +2,30 @@ extern crate nalgebra_glm as glm;
 mod util;
 
 use plox::gpu::{
-    text::{TextRenderer, TextRendererState},
+    text::{SharedText, TextElement, TextRenderer, TextRendererState, Transform},
     Render,
 };
+
+use plox::atlas::Atlas;
+use plox::font;
 
 use glutin::event::{ElementState::*, Event, KeyboardInput, VirtualKeyCode::*, WindowEvent};
 use glutin::event_loop::ControlFlow;
 use glutin::{Api::OpenGl, GlRequest::Specific};
 
 use std::ptr;
+use std::sync::{Arc, RwLock};
 
 // Initial window size.
 pub const SCREEN_W: u32 = 800;
 pub const SCREEN_H: u32 = 800;
 
 /// Contains everything that is used to feed data to the GPU.
-pub struct State {
+pub struct State<'a> {
     win_dims: (u32, u32),
-    mouse: Option<(f32, f32)>,
+    mouse: Arc<RwLock<(f32, f32)>>,
+    atlas: Atlas<'a>,
+    fps_text: SharedText,
     text_renderer: TextRenderer,
 }
 
@@ -33,26 +39,49 @@ unsafe fn render(state: &State) {
     gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
     state.text_renderer.invoke(&TextRendererState {
         win_dims: state.win_dims,
-        mouse: state.mouse,
     });
 }
 
-impl State {
+impl<'a> State<'a> {
     /// Create a new state.
     /// This involves, among other things, compiling and linking shaders,
     /// which means you need a valid GL context, which makes this unsafe.
-    unsafe fn new() -> State {
-        let before = std::time::Instant::now();
-        let text_renderer = TextRenderer::new();
-        let after = std::time::Instant::now();
-        println!(
-            "Renderer initialization time: {}ms",
-            (after - before).as_millis()
-        );
+    unsafe fn new() -> State<'a> {
+        let mut text_renderer = TextRenderer::new();
+
+        // Share ownership of the mouse position to animate.
+        let mouse = Arc::new(RwLock::new((0.0, 0.0)));
+        let m = mouse.clone();
+
+        let atlas = Atlas::new(&font::LM_MATH);
+
+        let txt = TextElement::new("\u{2207}\u{03B1} = \u{222B}\u{1D453}d\u{03BC}", &atlas)
+            // Hardcoded transform for now.
+            .transform(move || Transform {
+                scale: 125.0,
+                translation: *m.read().unwrap(),
+            });
+
+        let header = TextElement::new("GPU go BRRRRRRRRRRRRRRRRRRRRRRR", &atlas).transform(|| Transform {
+            scale: 70.0,
+            translation: (250.0, 730.0),
+        });
+
+        let fps_text = TextElement::new("Δt = ", &atlas).transform(|| Transform {
+            scale: 50.0,
+            translation: (10.0, 10.0),
+        });
+
+        let fps_text = Arc::new(RwLock::new(fps_text));
+        text_renderer.submit(fps_text.clone());
+        text_renderer.submit(Arc::new(RwLock::new(header)));
+        text_renderer.submit(Arc::new(RwLock::new(txt)));
 
         State {
             win_dims: (SCREEN_W, SCREEN_H),
-            mouse: None,
+            atlas,
+            fps_text,
+            mouse,
             text_renderer,
         }
     }
@@ -82,10 +111,8 @@ fn main() {
 
     // Some notable changes from Gloom: I render on the main thread using
     // the `RedrawRequested`-event, instead of using a separate thread.
-    // I was having some problems with the rendering thread panicking when
-    // I close the window, because the main thread exits without joining.
-    // This is possible to fix, but I'd rather deal with it if it becomes
-    // a problem, instead of prematurely.
+    // This allows redrawing sa lazily as possible, since this is not a game,
+    // updates might be rare and we would rather not hog the processing power.
 
     // Load OpenGL function pointers + make our window the current context.
     let ctx = unsafe {
@@ -98,8 +125,6 @@ fn main() {
     // OpenGL Initializerion.
     //
     unsafe {
-        gl::Enable(gl::DEPTH_TEST);
-        gl::DepthFunc(gl::LESS);
         gl::Disable(gl::MULTISAMPLE);
         gl::Enable(gl::BLEND);
         gl::BlendFuncSeparate(
@@ -148,13 +173,19 @@ fn main() {
             //     by resizing
             //  2. We explicitly request it.
             Event::RedrawRequested(_) => {
-                let bef = std::time::Instant::now();
                 unsafe {
+                    let beg = std::time::Instant::now();
                     render(&state);
-                    gl::Finish(); /* profiling */
+                    let end = std::time::Instant::now();
+                    state.fps_text.write().unwrap().update(
+                        &format!(
+                            "Δt = {}ns ({}ms)",
+                            (end - beg).as_nanos(),
+                            (end - beg).as_millis()
+                        ),
+                        &state.atlas,
+                    );
                 }
-                let aft = std::time::Instant::now();
-                println!("Frame time: {}ns (= {}ms)", (aft-bef).as_nanos(), (aft-bef).as_millis());
                 ctx.swap_buffers().unwrap();
             }
             //
@@ -198,7 +229,7 @@ fn main() {
                     // Translate into normal (x, y) coordinates.
                     let x = position.x as f32;
                     let y = state.win_dims.1 as f32 - position.y as f32;
-                    state.mouse = Some((x, y));
+                    *state.mouse.write().unwrap() = (x, y);
                     ctx.window().request_redraw();
                 }
                 _ => (),
