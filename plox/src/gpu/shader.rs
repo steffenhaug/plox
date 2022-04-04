@@ -13,8 +13,28 @@ pub struct Shader {
 //
 pub struct UniformMat4(pub GLint);
 pub struct UniformVec2(pub GLint);
+pub struct UniformVec4(pub GLint);
 pub struct UniformVec2i(pub GLint);
-pub struct UniformMultiSampler2D(pub GLint);
+
+pub trait Uniform {
+    fn wrap(uniform: GLint) -> Self;
+}
+
+macro_rules! uniform {
+    ( $x:ident ) => {
+        impl Uniform for $x {
+            #[inline(always)]
+            fn wrap(uniform: GLint) -> Self {
+                $x(uniform)
+            }
+        }
+    };
+}
+
+uniform!(UniformMat4);
+uniform!(UniformVec2);
+uniform!(UniformVec2i);
+uniform!(UniformVec4);
 
 // Shaders programs:
 // I just include them in the binary, so the binary is portable.
@@ -66,33 +86,9 @@ impl Shader {
         gl::UseProgram(self.shader);
     }
 
-    pub unsafe fn uniform_mat4(&self, name: &str) -> UniformMat4 {
+    pub unsafe fn uniform<U: Uniform>(&self, name: &str) -> U {
         if let Some(loc) = self.uniform_location(name) {
-            return UniformMat4(loc);
-        }
-
-        panic!("invalid uniform")
-    }
-
-    pub unsafe fn uniform_vec2(&self, name: &str) -> UniformVec2 {
-        if let Some(loc) = self.uniform_location(name) {
-            return UniformVec2(loc);
-        }
-
-        panic!("invalid uniform")
-    }
-
-    pub unsafe fn uniform_vec2i(&self, name: &str) -> UniformVec2i {
-        if let Some(loc) = self.uniform_location(name) {
-            return UniformVec2i(loc);
-        }
-
-        panic!("invalid uniform")
-    }
-
-    pub unsafe fn uniform_sampler2d(&self, name: &str) -> UniformMultiSampler2D {
-        if let Some(loc) = self.uniform_location(name) {
-            return UniformMultiSampler2D(loc);
+            return U::wrap(loc);
         }
 
         panic!("invalid uniform")
@@ -185,6 +181,13 @@ impl UniformVec2 {
     #[inline(always)]
     pub unsafe fn data(&self, x: f32, y: f32) {
         gl::Uniform2f(self.0, x, y);
+    }
+}
+
+impl UniformVec4 {
+    #[inline(always)]
+    pub unsafe fn data(&self, x: f32, y: f32, z: f32, w: f32) {
+        gl::Uniform4f(self.0, x, y, z, w);
     }
 }
 

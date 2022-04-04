@@ -713,8 +713,8 @@ Wallace accomplishes this by drawing the scene multiple times slightly offset, a
 samples in the color data. Again, this is a pretty ugly hack.
 Another slight irritation with the XOR-based modular arithmetic is that it works amazingly well for
 binary inputs (white and black) but if you draw text over a colored background, the result is not
-desirable: The glyph will always take the color $\text{RBGA}(1-\text R, 1-\text G, 1-\text B,
-1-\text A)$ relative to the background color.
+desirable: The glyph will always take the color $\text{RBGA}(\neg \text R, \neg \text G, \neg \text B,
+\neg \text A)$ bitwise relative to the background color.
 We want to use this rasterization _only_ as alpha channel, so we can control the color of the text,
 and we always want to start with alpha zero when we rasterize.
 
@@ -723,7 +723,7 @@ We keep a single-color texture in a frame-buffer that we can clear with
 $\text{RGBA}(0, 0, 0, 0)$ and use as a render target for the algorithm above.
 Then we create a new shader, that simply textures a quad with alpha-value from said texture.
 Another benefit of this: The rasterization resolution is independent of the final size of the quad,
-so it will be possible to intentionally create pixelated if that's desired.
+so it will be possible to intentionally rasterize pixelated text if that's desired.
 
 ![](report/alpha_textured.png)
 
@@ -746,4 +746,8 @@ algorithm utilizes GPU hardware in a more sensible way:
 Instead of solving hundreds of polynomials per sample, we simply invert colors in a texture.
 And instead of hand-coding a supersampling shader, we can make use of the built-in functionality,
 thus leveraging the hardware more optimally.
-This comes at the cost of some extra draw calls, and some extra state management.
+This comes at the cost of an extra draw call, and some extra state management.
+Additionally, this algorithm processes _a lot_ more vertices, as a tradeoff for having extremely
+simple fragment processing. On large workloads, such as rendering this entire reports text content (now around
+45000 characters), this can result in spending _a lot_ of time to discard 99% of the vertices if the
+text element is much bigger than the viewport.

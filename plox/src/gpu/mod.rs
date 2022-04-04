@@ -53,7 +53,7 @@ pub struct Ssbo {
 }
 
 pub struct MultisampleTexture {
-    tex: GLuint,
+    pub tex: GLuint,
 }
 
 impl<const N: u32> Vao<N> {

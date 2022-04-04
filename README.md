@@ -6,6 +6,29 @@ graphics project for tdt4230
 
 (plese send help)
 
+
+# inspiration, background
+- making _nice_ plots in Python is really annoying
+    - latex as backend, generate postscript
+    - doesnt work for animations at all
+    - very slow
+
+- inspired by beautiful maths videos
+    - 3b1b
+    - freya holmér
+    - mathologer
+
+- need a tool that can create figures that are
+    - animated (60 fps+ videos)
+    - _high quality_ typography, meaning: scale independent, no artefacts
+
+- main challenge is text, but also
+    - arbitrarty quadratic spline contours
+    - lines & dots
+    - circle arcs
+    - axes, grid
+    - dotted lines
+
 Uses a variant of Evan Wallaces color flipping method but replaces the color accumulation
 techniques for winding number calculation and anti-aliasing by drawing with XOR color logic 
 into a multisample α-texture.
@@ -58,6 +81,10 @@ check if allsorts shaper has better API
 ### curves in general + backround math
 https://www.youtube.com/watch?v=aVwxzDHniEw&t=1282s freya bezier curves
 https://www.youtube.com/watch?v=N-KXStupwsc   MATHOLOGER CUBIC
+
+https://news.ycombinator.com/item?id=30901537
+
+https://blog.mecheye.net/2019/05/why-is-2d-graphics-is-harder-than-3d-graphics/
 
 FONT FORGE FONT RELATED MATH
 https://fontforge.org/docs/techref/pfaeditmath.html

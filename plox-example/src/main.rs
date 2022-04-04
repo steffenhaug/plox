@@ -148,9 +148,13 @@ fn main() {
             //     by resizing
             //  2. We explicitly request it.
             Event::RedrawRequested(_) => {
+                let bef = std::time::Instant::now();
                 unsafe {
                     render(&state);
+                    gl::Finish(); /* profiling */
                 }
+                let aft = std::time::Instant::now();
+                println!("Frame time: {}ns (= {}ms)", (aft-bef).as_nanos(), (aft-bef).as_millis());
                 ctx.swap_buffers().unwrap();
             }
             //
