@@ -2,6 +2,7 @@
 use gl::{types::*, FRAGMENT_SHADER, VERTEX_SHADER};
 use std::ffi::CString;
 use std::ptr;
+use lazy_static::lazy_static;
 
 /// A shader is just a wrapper around its program ID.
 pub struct Shader {

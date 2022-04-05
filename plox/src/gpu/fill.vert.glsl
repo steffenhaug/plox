@@ -9,6 +9,7 @@ uniform mat4 mvp;
 /// the origin. Then stencil buffer flipping will handle the
 /// rest.
 void main() {
+    // This sends the middle control point (index mod 3 = 1) to the origin.
     float delete_midpoint = abs(gl_VertexID % 3 - 1);
     gl_Position = mvp * delete_midpoint * vec4(position, 0.0, 1.0);
 }

@@ -4,10 +4,11 @@ mod util;
 use plox::gpu::{
     text::{SharedText, TextElement, TextRenderer, TextRendererState, Transform},
     Render,
+    typeset::{TypesetText, Node}
 };
-
 use plox::atlas::Atlas;
 use plox::font;
+use plox::spline::Rect;
 
 use glutin::event::{ElementState::*, Event, KeyboardInput, VirtualKeyCode::*, WindowEvent};
 use glutin::event_loop::ControlFlow;
@@ -23,7 +24,6 @@ pub const SCREEN_H: u32 = 800;
 /// Contains everything that is used to feed data to the GPU.
 pub struct State<'a> {
     win_dims: (u32, u32),
-    mouse: Arc<RwLock<(f32, f32)>>,
     atlas: Atlas<'a>,
     fps_text: SharedText,
     text_renderer: TextRenderer,
@@ -48,40 +48,40 @@ impl<'a> State<'a> {
     /// which means you need a valid GL context, which makes this unsafe.
     unsafe fn new() -> State<'a> {
         let mut text_renderer = TextRenderer::new();
-
-        // Share ownership of the mouse position to animate.
-        let mouse = Arc::new(RwLock::new((0.0, 0.0)));
-        let m = mouse.clone();
-
         let atlas = Atlas::new(&font::LM_MATH);
 
-        let txt = TextElement::new("\u{2207}\u{03B1} = \u{222B}\u{1D453}d\u{03BC}", &atlas)
-            // Hardcoded transform for now.
-            .transform(move || Transform {
-                scale: 125.0,
-                translation: *m.read().unwrap(),
-            });
 
-        let header = TextElement::new("GPU go BRRRRRRRRRRRRRRRRRRRRRRR", &atlas).transform(|| Transform {
-            scale: 70.0,
-            translation: (250.0, 730.0),
-        });
+        let txt = TextElement::new("\u{2207}\u{03B1} = \u{222B}\u{1D453}d\u{03BC}", &atlas);
+        let bbox = txt.bbox;
+        let txt = TypesetText {
+            content: Node::Text(Arc::new(RwLock::new(txt))),
+            bbox,
+            transform: Transform {
+                scale: 90.0,
+                translation: (100.0, 400.0)
+            }
+        };
 
-        let fps_text = TextElement::new("Δt = ", &atlas).transform(|| Transform {
-            scale: 50.0,
-            translation: (10.0, 10.0),
-        });
+        text_renderer.submit(txt);
 
-        let fps_text = Arc::new(RwLock::new(fps_text));
-        text_renderer.submit(fps_text.clone());
-        text_renderer.submit(Arc::new(RwLock::new(header)));
-        text_renderer.submit(Arc::new(RwLock::new(txt)));
+        let fps = TextElement::new("d", &atlas);
+        let bbox = fps.bbox;
+        let fps_text = Arc::new(RwLock::new(fps));
+        let fps = TypesetText {
+            content: Node::Text(fps_text.clone()),
+            bbox,
+            transform: Transform {
+                scale: 25.0,
+                translation: (10.0, 10.0)
+            }
+        };
+
+        text_renderer.submit(fps);
 
         State {
             win_dims: (SCREEN_W, SCREEN_H),
             atlas,
             fps_text,
-            mouse,
             text_renderer,
         }
     }
@@ -227,9 +227,8 @@ fn main() {
                 },
                 WindowEvent::CursorMoved { position, .. } => {
                     // Translate into normal (x, y) coordinates.
-                    let x = position.x as f32;
-                    let y = state.win_dims.1 as f32 - position.y as f32;
-                    *state.mouse.write().unwrap() = (x, y);
+                    let _x = position.x as f32;
+                    let _y = state.win_dims.1 as f32 - position.y as f32;
                     ctx.window().request_redraw();
                 }
                 _ => (),

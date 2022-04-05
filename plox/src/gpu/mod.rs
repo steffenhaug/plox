@@ -17,6 +17,7 @@
 //! supply some default parameters to avoid misuse.
 pub mod shader;
 pub mod text; // text rendering
+pub mod typeset;
 
 use gl::types::*;
 use std::ptr;
@@ -33,7 +34,7 @@ pub trait Render {
 }
 
 //
-// Buffer management.
+// Video memory management.
 //
 
 pub struct Vao<const N: u32> {
@@ -56,6 +57,26 @@ pub struct MultisampleTexture {
     pub tex: GLuint,
 }
 
+//
+// Utility functions.
+//
+
+// Get # of bytes in an array.
+#[inline(always)]
+pub fn gl_buf_size<T>(val: &[T]) -> GLsizeiptr {
+    std::mem::size_of_val(&val[..]) as GLsizeiptr
+}
+
+// Get the OpenGL-compatible pointer to an arbitrary array of numbers
+#[inline(always)]
+pub fn gl_ptr<T>(val: &[T]) -> *const GLvoid {
+    val.as_ptr() as *const GLvoid
+}
+
+//
+// Implementations
+//
+
 impl<const N: u32> Vao<N> {
     #[inline(always)]
     pub unsafe fn gen() -> Self {
@@ -66,7 +87,7 @@ impl<const N: u32> Vao<N> {
 
     #[inline(always)]
     pub unsafe fn enable_attrib_arrays(&self) {
-        self.bind();
+        gl::BindVertexArray(self.array);
         for i in 0..N {
             gl::EnableVertexAttribArray(i);
         }
@@ -74,7 +95,7 @@ impl<const N: u32> Vao<N> {
 
     #[inline(always)]
     pub unsafe fn attrib_ptr(&self, index: GLuint, size: GLsizei, ty: GLenum) {
-        self.bind();
+        gl::BindVertexArray(self.array);
         let stride = 0; // Tightly packed atributes.
         let pointer = ptr::null(); // No offset in the buffer.
         let normalized = gl::FALSE;
@@ -83,7 +104,7 @@ impl<const N: u32> Vao<N> {
 
     #[inline(always)]
     pub unsafe fn attrib_iptr(&self, index: GLuint, size: GLsizei, ty: GLenum) {
-        self.bind();
+        gl::BindVertexArray(self.array);
         let stride = 0; // Tightly packed atributes.
         let pointer = ptr::null(); // No offset in the buffer.
         gl::VertexAttribIPointer(index, size, ty, stride, pointer);
@@ -110,7 +131,7 @@ impl Vbo {
 
     #[inline(always)]
     pub unsafe fn data<T>(&self, vertices: &[T]) {
-        self.bind();
+        gl::BindBuffer(gl::ARRAY_BUFFER, self.buffer);
         gl::BufferData(
             gl::ARRAY_BUFFER,
             gl_buf_size(vertices),
@@ -135,7 +156,7 @@ impl Ibo {
 
     #[inline(always)]
     pub unsafe fn data(&self, indices: &[u32]) {
-        self.bind();
+        gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.buffer);
         gl::BufferData(
             gl::ELEMENT_ARRAY_BUFFER,
             gl_buf_size(indices),
@@ -160,7 +181,7 @@ impl Ssbo {
 
     #[inline(always)]
     pub unsafe fn data<T>(&self, ssbo: &[T]) {
-        self.bind();
+        gl::BindBuffer(gl::SHADER_STORAGE_BUFFER, self.buffer);
         gl::BufferData(
             gl::SHADER_STORAGE_BUFFER,
             gl_buf_size(ssbo),
@@ -175,14 +196,35 @@ impl Ssbo {
     }
 }
 
-// Get # of bytes in an array.
-#[inline(always)]
-pub fn gl_buf_size<T>(val: &[T]) -> GLsizeiptr {
-    std::mem::size_of_val(&val[..]) as GLsizeiptr
-}
+impl MultisampleTexture {
+    #[inline(always)]
+    pub unsafe fn bind(&self) {
+        gl::BindTexture(gl::TEXTURE_2D_MULTISAMPLE, self.tex);
+    }
 
-// Get the OpenGL-compatible pointer to an arbitrary array of numbers
-#[inline(always)]
-pub fn gl_ptr<T>(val: &[T]) -> *const GLvoid {
-    val.as_ptr() as *const GLvoid
+    /// Create a single-channel multisampled texture. Used as alpha-channel
+    /// for anti-aliased text.
+    #[inline(always)]
+    pub unsafe fn alpha(width: u32, height: u32) -> MultisampleTexture {
+        let mut tex = 0;
+        gl::GenTextures(1, &mut tex);
+        gl::BindTexture(gl::TEXTURE_2D_MULTISAMPLE, tex);
+
+        gl::TexImage2DMultisample(
+            gl::TEXTURE_2D_MULTISAMPLE,
+            // 16x hard-coded for now. Could tweak this at type level.
+            16,
+            // A single color channel.
+            gl::R8,
+            // Negative dims is actually error, so casting a u32
+            // is better than exposing the real type.
+            width as i32,
+            height as i32,
+            // Use fixed sample locations.
+            gl::TRUE,
+        );
+
+        gl::BindTexture(gl::TEXTURE_2D_MULTISAMPLE, 0);
+        MultisampleTexture { tex }
+    }
 }
