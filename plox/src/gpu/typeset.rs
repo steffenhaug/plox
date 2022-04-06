@@ -15,6 +15,10 @@ pub enum Node {
         hi_limit: Option<Arc<Typeset>>,
         text: Arc<Typeset>,
     },
+    // Still to do:
+    // - sub/superscript
+    // - fractions
+    // - radicals
 }
 
 /// A Typeset text element is essentially a scene graph.
@@ -22,22 +26,12 @@ pub struct Typeset {
     pub content: Node,
     pub bbox: Rect,
     // Transform relative to the parent node.
-    pub transform: Transform,
+    pub transform: Box<dyn Fn() -> Transform>,
 }
 
 impl Typeset {
-    pub fn transform(mut self, t: Transform) -> Self {
-        self.transform = t;
-        self
-    }
-
-    pub fn raise(mut self, dy: f32) -> Self {
-        self.transform.translation.1 += dy;
-        self
-    }
-
-    pub fn scale(mut self, s: f32) -> Self {
-        self.transform.scale *= s;
+    pub fn transform(mut self, f: impl 'static + Fn() -> Transform) -> Self {
+        self.transform = Box::new(f);
         self
     }
 
@@ -47,7 +41,7 @@ impl Typeset {
         Typeset {
             content: Node::Text(Arc::new(RwLock::new(content))),
             bbox,
-            transform: Transform::identity(),
+            transform: Box::new(|| Transform::identity()),
         }
     }
 
@@ -58,7 +52,7 @@ impl Typeset {
         Typeset {
             content: Node::Text(Arc::new(RwLock::new(content))),
             bbox,
-            transform: Transform::identity(),
+            transform: Box::new(|| Transform::identity()),
         }
     }
 
@@ -80,16 +74,17 @@ impl Typeset {
         Typeset {
             content: Node::Seq(content),
             bbox,
-            transform: Transform::identity(),
+            transform: Box::new(|| Transform::identity()),
         }
     }
 
     pub unsafe fn limits(from: Option<Typeset>, to: Option<Typeset>, around: Typeset) -> Typeset {
+        let a_tr = (around.transform)();
         let bbox = Rect {
-            x0: around.bbox.x0 * around.transform.scale,
-            x1: around.bbox.x1 * around.transform.scale,
-            y0: around.bbox.y0 * around.transform.scale,
-            y1: around.bbox.y1 * around.transform.scale,
+            x0: around.bbox.x0 * a_tr.scale,
+            x1: around.bbox.x1 * a_tr.scale,
+            y0: around.bbox.y0 * a_tr.scale,
+            y1: around.bbox.y1 * a_tr.scale,
         };
 
         Typeset {
@@ -99,7 +94,7 @@ impl Typeset {
                 text: Arc::new(around),
             },
             bbox,
-            transform: Transform::identity(),
+            transform: Box::new(|| Transform::identity()),
         }
     }
 
@@ -108,27 +103,28 @@ impl Typeset {
         // TODO: Actually  find out how latex adjusts this instead of these random values
 
         let from = from.map(|t| {
-            t.transform(Transform {
+            t.transform(Box::new(|| Transform {
                 scale: 1.0,
                 translation: (-0.4, -0.15),
-            })
+            }))
         });
 
         let to = to.map(|t| {
-            t.transform(Transform {
+            t.transform(Box::new(|| Transform {
                 scale: 1.0,
                 translation: (0.3, 0.1),
-            })
+            }))
         });
 
         // Create a text node with an integral symbol.
         let int = Typeset::stack("\u{2320}", "\u{2321}", atlas);
 
         // Typeset the integral symbol with the kerned limits.
-        Typeset::limits(from, to, int)
+        Typeset::limits(from, to, int).transform(Box::new(|| Transform {
             // Adjust the integral to match LaTeX approximately
-            .raise(-0.7883)
-            .scale(0.80)
+            scale: 0.80,
+            translation: (0.0, -0.7883),
+        }))
     }
 
     pub unsafe fn rasterize(
@@ -137,7 +133,7 @@ impl Typeset {
         state: &TextRendererState,
         transform_so_far: &Transform,
     ) {
-        let transform = transform_so_far.compose(&self.transform);
+        let transform = transform_so_far.compose(&(self.transform)());
         match &self.content {
             // For a simple text box, simply rasterize it.
             Text(arc) => {
@@ -152,11 +148,12 @@ impl Typeset {
                 for text in texts {
                     // Apply transform to the left side (essentially preserces kerning between
                     // elements)
-                    dx += transform.scale * text.transform.scale * text.bbox.x0;
+                    let text_tr = (text.transform)();
+                    dx += transform.scale * text_tr.scale * text.bbox.x0;
                     let transform = transform.translate(dx, 0.0);
                     text.rasterize(renderer, state, &transform);
                     // Apply transformation past the text element.
-                    dx += transform.scale * text.transform.scale * text.bbox.x1;
+                    dx += transform.scale * text_tr.scale * text.bbox.x1;
                 }
             }
             // For an object with limits, we need to calculate affine transforms for the

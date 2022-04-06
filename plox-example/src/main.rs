@@ -57,17 +57,10 @@ impl<'a> State<'a> {
 
         let body = Typeset::text("\u{1D453}(\u{1D467})d\u{1D707}", &atlas);
 
-        let int = Typeset::seq(vec![sum, body])
-            .transform(Transform {
-                scale: 100.0,
-                translation: (200.0, 400.0)
-            });
-
-        let x = TextElement::new("x", &atlas);
-        println!("x = {:?}", x.bbox);
-
-        let i = Typeset::integral(None, None, &atlas).scale(1.0/1.2904);
-        println!("integ = {:?}, T={:?}", i.bbox, i.transform);
+        let int = Typeset::seq(vec![sum, body]).transform(Box::new(|| Transform {
+            scale: 100.0,
+            translation: (200.0, 400.0),
+        }));
 
         text_renderer.submit(int);
 
@@ -77,10 +70,10 @@ impl<'a> State<'a> {
         let fps = Typeset {
             content: Node::Text(fps_text.clone()),
             bbox,
-            transform: Transform {
+            transform: Box::new(|| Transform {
                 scale: 25.0,
                 translation: (10.0, 10.0),
-            },
+            }),
         };
 
         text_renderer.submit(fps);
