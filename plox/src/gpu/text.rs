@@ -20,7 +20,6 @@ pub struct TextRenderer {
     sample: Shader,
     sample_mvp: UniformMat4,
     u_tex_dims: UniformVec2i,
-    u_coverage: UniformVec2,
     u_bbox: UniformVec4,
 }
 
@@ -52,29 +51,32 @@ impl TextElement {
         // Some preliminary coordinate transform calculations.
         //
 
-        // Scale is how many pixels tall the text is.
+        // Scale is how many pixels tall the text is. (1em in pixels)
         // Translation is position in pixel coordinates.
         let Transform {
             scale,
             translation: (x, y),
         } = *transform;
 
-        // Coordinates in pixels.
+        // Bounding box coordinates in pixels.
         let bbox = self.bbox;
         let (x0, x1) = ((scale * bbox.x0).floor(), (scale * bbox.x1).ceil());
         let (y0, y1) = ((scale * bbox.y0).floor(), (scale * bbox.y1).ceil());
 
-        // The width and height (in pixels) of the quad.
+        // The width and height (again, in pixels) of the quad.
         let w = x1 - x0;
         let h = y1 - y0;
 
-        // This may extend past the window. We want to clamp it so OpenGL can
-        // clip letters that are outside the texture.
-        let (win_w, win_h) = state.win_dims;
-        let tw = f32::min(w, win_w as f32);
-        let th = f32::min(h, win_h as f32);
+        // Issue: In theory the bbox might extend past the texture.
+        // This can be "fixed" by using a massive texture. This will invoke fragment processing of
+        // off-screen fragments, but it is actually not as costly as you would think, since
+        // the fragment shader is cheap, and the vertex processing (where the magic happens) has
+        // to be done anyways.
 
-        // Projects the text element onto the texture.
+        let tw = 4096.0;
+        let th = 4096.0;
+
+        // Projects the text element onto the (4K) texture.
         let texture_projection = glm::ortho(x0, x0 + tw, y0, y0 + th, 0.0, 100.0);
         let texture_scale = glm::scaling(&glm::vec3(scale, scale, 0.0));
         let texture_mvp = texture_projection * texture_scale;
@@ -83,7 +85,7 @@ impl TextElement {
         // Rasterize α-texture.
         //
 
-        // Look at a correctly sized box in the texture
+        // Look at a correctly sized box in the texture.
         gl::BindFramebuffer(gl::FRAMEBUFFER, renderer.fbuf);
         gl::Viewport(0, 0, tw as i32, th as i32);
 
@@ -110,6 +112,7 @@ impl TextElement {
         // Render to the window again.
         gl::Disable(gl::COLOR_LOGIC_OP);
         gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+        let (win_w, win_h) = state.win_dims;
         gl::Viewport(0, 0, win_w as i32, win_h as i32);
 
         //
@@ -120,12 +123,11 @@ impl TextElement {
 
         // Submit data about the quad.
         renderer.u_bbox.data(x0, y0, x1, y1);
-        renderer.u_coverage.data(w / tw, h / th);
-        renderer.u_tex_dims.data(tw as i32, th as i32);
+        renderer.u_tex_dims.data(w as i32, h as i32);
 
         // Window projection.
         let window_projection = glm::ortho(0.0, win_w as f32, 0.0, win_h as f32, 0.0, 100.0);
-        let model_matrix = glm::translation(&glm::vec3(x, y, 0.0));
+        let model_matrix = glm::translation(&glm::vec3(x.floor(), y.floor(), 0.0));
         let window_mvp = window_projection * model_matrix;
         let u_mvp = &renderer.sample_mvp;
         u_mvp.data(&window_mvp);
@@ -163,7 +165,7 @@ impl TextElement {
             y0: top.bbox.y0 + dy,
             // We just need a _tiny_ bit more space so the addition plays nicely with rounding and
             // anti-aliasing.
-            y1: top.bbox.y1 + dy + 1e-2
+            y1: top.bbox.y1 + dy + 1e-3,
         });
 
         let vao = Vao::<1>::gen();
@@ -230,7 +232,6 @@ impl TextRenderer {
 
         let sample = Shader::sample();
         let u_tex_dims = sample.uniform("tex_dims");
-        let u_coverage = sample.uniform("coverage");
         let u_bbox = sample.uniform("bbox");
         let sample_mvp = sample.uniform("mvp");
 
@@ -265,7 +266,6 @@ impl TextRenderer {
             sample,
             sample_mvp,
             u_tex_dims,
-            u_coverage,
             u_bbox,
             tex,
             fbuf,

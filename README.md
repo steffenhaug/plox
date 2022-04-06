@@ -6,7 +6,6 @@ graphics project for tdt4230
 
 (plese send help)
 
-
 # inspiration, background
 - making _nice_ plots in Python is really annoying
     - latex as backend, generate postscript
@@ -14,13 +13,14 @@ graphics project for tdt4230
     - very slow
 
 - inspired by beautiful maths videos
-    - 3b1b
-    - freya holmér
-    - mathologer
+    - 3b1b (https://www.youtube.com/watch?v=p_di4Zn4wz4 ~5:30)
+    - freya holmér (https://www.youtube.com/watch?v=aVwxzDHniEw&t=292s   0:40)
+    - mathologer (https://www.youtube.com/watch?v=N-KXStupwsc&t=1806s  30:45)
 
 - need a tool that can create figures that are
     - animated (60 fps+ videos)
-    - _high quality_ typography, meaning: scale independent, no artefacts
+    - _high quality_ typography, meaning: scale independant, no artifacts
+        - texture atlas and distance fields immediately disqualified
 
 - main challenge is text, but also
     - arbitrarty quadratic spline contours
@@ -28,6 +28,8 @@ graphics project for tdt4230
     - circle arcs
     - axes, grid
     - dotted lines
+
+problem: implicit geometry is difficult in the gpu pipeline.
 
 Uses a variant of Evan Wallaces color flipping method but replaces the color accumulation
 techniques for winding number calculation and anti-aliasing by drawing with XOR color logic 
@@ -63,6 +65,7 @@ a possible optimization.
 - latex parser or some shit
 - run Lua/Fennel in a separate thread with an event loop proxy
 - better gl abstraction or use vulkan
+- replace the arc<rwlock> mess (crossbeam atomic cells maybe)
 
 ## simplifying assumptions:
 - use latex font (include in repo, ttf only, hardcoded path, cant go wrong) legal to redistribute

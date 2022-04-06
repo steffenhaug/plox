@@ -4,15 +4,13 @@ mod util;
 use plox::atlas::Atlas;
 use plox::font;
 use plox::gpu::{
-    text::{SharedText, TextElement, TextRenderer, TextRendererState, Transform},
+    text::{TextElement, TextRenderer, TextRendererState, Transform},
     typeset::{Node, Typeset},
     Render,
 };
-use plox::spline::Rect;
 
 use glutin::event::{ElementState::*, Event, KeyboardInput, VirtualKeyCode::*, WindowEvent};
 use glutin::event_loop::ControlFlow;
-use glutin::{Api::OpenGl, GlRequest::Specific};
 
 use std::ptr;
 use std::sync::{Arc, RwLock};
@@ -21,19 +19,18 @@ use std::sync::{Arc, RwLock};
 pub const SCREEN_W: u32 = 800;
 pub const SCREEN_H: u32 = 800;
 
+type Mutable<T> = Arc<RwLock<T>>;
+
 /// Contains everything that is used to feed data to the GPU.
 pub struct State<'a> {
-    win_dims: (u32, u32),
     atlas: Atlas<'a>,
-    fps_text: SharedText,
+    win_dims: (u32, u32),
+    mouse: Mutable<(f32, f32)>,
+    fps_text: Mutable<TextElement>,
     text_renderer: TextRenderer,
 }
 
 /// Performs drawing operations.
-/// Unsafe because the responsibility of not performing undefined
-/// OpenGL behaviour lies on the caller. So the state needs to not
-/// have invalid handles, the right GL context needs to be active,
-/// and so on.
 unsafe fn render(state: &State) {
     gl::ClearColor(1.0, 1.0, 1.0, 1.0);
     gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
@@ -50,18 +47,22 @@ impl<'a> State<'a> {
         let mut text_renderer = TextRenderer::new();
         let atlas = Atlas::new(&font::LM_MATH);
 
-        let lim1 = Typeset::text("\u{1D6FC}", &atlas);
-        let lim2 = Typeset::text("\u{1D6FD}", &atlas);
+        // shared mouse position
+        let mouse = Arc::new(RwLock::new((0.0, 0.0)));
 
-        let sum = Typeset::integral(Some(lim1), Some(lim2), &atlas);
+        // Typeset a test integral
+        let lim1 = Typeset::text("Ω", &atlas);
+        let sum = Typeset::integral(Some(lim1), None, &atlas);
+        let body = Typeset::text("\u{1D453}(\u{1D467})d\u{1D467}", &atlas);
 
-        let body = Typeset::text("\u{1D453}(\u{1D467})d\u{1D707}", &atlas);
-
-        let int = Typeset::seq(vec![sum, body]).transform(Box::new(|| Transform {
-            scale: 100.0,
-            translation: (200.0, 400.0),
+        // Give it translation defined by mouse position.
+        let m = mouse.clone();
+        let int = Typeset::seq(vec![sum, body]).transform(Box::new(move || Transform {
+            scale: f32::max(50.0, 2.0 * m.read().unwrap().1 - 400.0),
+            translation: *m.read().unwrap(),
         }));
 
+        // Submit it to the renderer.
         text_renderer.submit(int);
 
         let fps = TextElement::new(" ", &atlas);
@@ -80,6 +81,7 @@ impl<'a> State<'a> {
 
         State {
             win_dims: (SCREEN_W, SCREEN_H),
+            mouse,
             atlas,
             fps_text,
             text_renderer,
@@ -101,7 +103,6 @@ fn main() {
     let cb = glutin::ContextBuilder::new()
         // I need this version for SSBO. Without this, it defaulted to ES 3.2.
         // Maybe that's a Nvidia driver / Wayland thing.
-        .with_gl(Specific(OpenGl, (4, 4)))
         // I think Waylands compositor handles this. With VSync enabled we don't get a context.
         // Should probably set this flag based on whether we are running under Wayland if
         // that is possible to find out.
@@ -227,8 +228,9 @@ fn main() {
                 },
                 WindowEvent::CursorMoved { position, .. } => {
                     // Translate into normal (x, y) coordinates.
-                    let _x = position.x as f32;
-                    let _y = state.win_dims.1 as f32 - position.y as f32;
+                    let x = (position.x as f32).round();
+                    let y = (state.win_dims.1 as f32 - position.y as f32).round();
+                    *state.mouse.write().unwrap() = (x, y);
                     ctx.window().request_redraw();
                 }
                 _ => (),

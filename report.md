@@ -760,6 +760,9 @@ even texturing) the text. And two, we automatically leverage the GPUs compositin
 anti-aliasing is "correct" when text is overlapping. Both of these things are demonstrated in the
 figure above.
 
+The final advantage of this method is that it completely circumvents the use of SSBOs, so the program can work on MacOS.
+Mac users all over the world are (presumably) rejoicing.
+
 # Typesetting revisited
 Now that we (_finally_) can rasterize some text, it is time to finally render something
 interesting. We need to be able to position text elements relative to eachother, for example, we

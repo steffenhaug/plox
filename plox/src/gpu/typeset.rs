@@ -150,7 +150,7 @@ impl Typeset {
                     // elements)
                     let text_tr = (text.transform)();
                     dx += transform.scale * text_tr.scale * text.bbox.x0;
-                    let transform = transform.translate(dx, 0.0);
+                    let transform = transform.translate(dx.round(), 0.0);
                     text.rasterize(renderer, state, &transform);
                     // Apply transformation past the text element.
                     dx += transform.scale * text_tr.scale * text.bbox.x1;

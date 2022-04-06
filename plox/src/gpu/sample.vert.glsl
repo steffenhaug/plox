@@ -17,12 +17,12 @@ void main() {
     );
 
     const vec2 uv_buffer[6] = vec2[](
-        vec2(         0,          0), /* 1st triangle */
-        vec2(coverage.x,          0),
-        vec2(coverage.x, coverage.y),
-        vec2(         0,          0), /* 2nd triangle */
-        vec2(coverage.x, coverage.y),
-        vec2(         0, coverage.y)
+        vec2(0, 0), /* 1st triangle */
+        vec2(1, 0),
+        vec2(1, 1),
+        vec2(0, 0), /* 2nd triangle */
+        vec2(1, 1),
+        vec2(0, 1)
     );
     
     gl_Position = mvp * vec4(vertex_buffer[gl_VertexID], 0.0, 1.0);
