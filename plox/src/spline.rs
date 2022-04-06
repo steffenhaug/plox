@@ -219,7 +219,7 @@ impl ttf_parser::OutlineBuilder for Builder {
         let m = lerp(self.position, target, 0.33);
         self.beziers.push(
             // Translate the Bézier curve relative to the cursor.
-            Quadratic(self.position, m, target)
+            Quadratic(self.position, m, target),
         );
         self.position = target;
     }
@@ -238,7 +238,7 @@ impl ttf_parser::OutlineBuilder for Builder {
                 self.position,
                 Point { x: x1, y: y1 }, // Control point
                 Point { x, y },
-            )
+            ),
         );
 
         self.position = Point { x, y };
@@ -268,6 +268,25 @@ impl Point {
         let dx = f32::abs(p.x - self.x);
         let dy = f32::abs(p.y - self.y);
         f32::sqrt(dx.powi(2) + dy.powi(2))
+    }
+}
+
+impl Rect {
+    pub fn width(&self) -> f32 {
+        self.x1 - self.x0
+    }
+
+    pub fn height(&self) -> f32 {
+        self.y1 - self.y0
+    }
+
+    /// Calculate a new Rect which is the tight bounding box around two rectangles.
+    pub fn extend(&self, rect: Rect) -> Rect {
+        let x0 = f32::min(self.x0, rect.x0);
+        let x1 = f32::max(self.x1, rect.x1);
+        let y0 = f32::min(self.y0, rect.y0);
+        let y1 = f32::max(self.y1, rect.y1);
+        Rect { x0, y0, x1, y1 }
     }
 }
 

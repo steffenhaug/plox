@@ -44,23 +44,11 @@ a possible optimization.
     - figure out AA here
 3. ✅single-character hardware rasterizer
 4. ✅application of transformations to single character (translation and scaling)
-5. typesetting engine that parses "latex" into a scene graph
-    - special symbols have hardcoded rules
-    - use kerning data
-6. typesetting of "latex"
+6. ✅ (kinda) typesetting of "latex"
 7. typesetting of non-character bezier-curve based things (axes, tick marks, etc)
 
 ## immediate to-do list:
 - profiling, tracing and logging
-- text elements need to know their total bounding box
-  and use this as a reference point for translation
-  either that, or wrap them in a "box" abstraction (ala fbox)
-- design layout system
-    option 1: hard code layouts for integrals etc
-    option 2: generic scaled boxes, overset/underset boxes
-- "latex" parser -> scene graph
-- figure out dynamic text. simple idea: arc<refcell<text>> and store the arc
-  in the renderer
 - line breaking algorithm (i think this is easy) needed for labels if they get long
     without justification, just group characters separated by space
         - push the text if it fits
@@ -68,12 +56,16 @@ a possible optimization.
           add baseline-skip to cursor y
 - drawing outlines of boxes for debugging
     - line shader: dashed, dotted, etc
+- clean up the interface to the blitting shader so em-coordinates is avialable in the fragment
+  shader
 
-## things
-check if allsorts shaper has better API
+## future work
+- latex parser or some shit
+- run Lua/Fennel in a separate thread with an event loop proxy
+- better gl abstraction or use vulkan
 
 ## simplifying assumptions:
-- use latex font (include in repo, otf only, hardcoded path, cant go wrong) legal to redistribute
+- use latex font (include in repo, ttf only, hardcoded path, cant go wrong) legal to redistribute
 
 ∫
 
@@ -125,24 +117,7 @@ https://news.ycombinator.com/item?id=11440599
 ### font stuff
 https://simoncozens.github.io/fonts-and-layout/opentype.html
 
+https://people.eecs.berkeley.edu/~fateman/temp/neuform.pdf
+
 MATH symbols unicode table
 https://unicode-search.net/unicode-namesearch.pl?term=MATHEMATICAL
-
-
-## rust-libraries
-rustybuzz - text shaping. not sure if i need this if im gonna typeset math myself but anyway
-
-
-# performance
-It is pretty good.
-creating font atlases for large fonts takes milliseconds, courtesy of rayon.
-rasterization is expensive, but there is still room for optimizing the shader, its
-a very naïve multisampling in the current iteration.
-Specifically, ~4x speedup should theoretically be possible just by reusing roots.
-I'm currently re-calculating the bounding box of glyphs when shaping, even though this data is
-cached in the font atlas, because it is convenient. There is some time to gain here.
-
-```
-valgrind --tool=callgrind --dump-instr=yes --collect-jumps=yes --simulate-cache=yes target/release/plox-example
-```
-

@@ -759,3 +759,43 @@ with another fragment shader is that, one, we can do arbitrary fragment processi
 even texturing) the text. And two, we automatically leverage the GPUs compositing ability so the
 anti-aliasing is "correct" when text is overlapping. Both of these things are demonstrated in the
 figure above.
+
+# Typesetting revisited
+Now that we (_finally_) can rasterize some text, it is time to finally render something
+interesting. We need to be able to position text elements relative to eachother, for example, we
+need to be able to put a text element below an integral sign to typeset an integral with limits.
+Thankfully we have a perfect tool at our disposal: A scen graph.
+This woul enable us to "attach" a text element as a child of another, and position it relative to
+it by applying its parent transform to itself. We can also adjust kerning relative to the parent by
+applying a transformation just to the child. For example, when typesetting an integral, we might
+want to move the lower bound slightly to the left, and the upper bound slightly to the right.
+
+![The first use of a scene graph to typeset an integral.](report/short_int.png)
+
+And for reference:
+$$
+\int\displaylimits_\alpha^\beta f(z) \mathrm d \mu
+$$
+
+This primitive approach is already looking pretty good, (the fragment shader probably helps!) but
+there is clearly some problems. First of all, the "math" symbols $f$, $z$ and $\mu$ ar actually in
+a separate unicode range, distinct from the "upright" symbols intended for prose.
+Secondly, our version has a short stubby integral symbol that has been scaled up by applying a
+transform to it. This is clearly readable, but it looks "off" to have characters drawn with
+disproportionally large strokes like this.
+After a statistical survey with sample size $N=2$ (my girlfriend, and my friend in Switzerland) 
+I conclude that everyone only likes them long, so we need to do something.
+
+These "large" symbols are actually implemented in a pretty annoying way: They are composed of
+different glyphs in the underlying font, with separate code points.
+For example, the integral symbol consists of unicode `0x2320` and `0x2321`.
+But we never want to treat these glpyhs as separate symbols. Trying to hack this together in the
+current font rendering system by using negative kerning and vertical offsets is first of all just
+begging for errors, and secondly extremely annoying. A "nicer" way would be to support some form of
+automatic merging of glyphs from the font atlas.
+
+![The same integral, with adjustments making use of the obscure symbols in higher unicode ranges.](report/latex_adjustments.png)
+
+Now we are getting somewhere. The kerning and scale adjustments are selected to approximately mimic
+\LaTeX. 
+

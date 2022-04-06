@@ -1,13 +1,13 @@
 //! # Text Renderer implementation.
 use crate::atlas::{Atlas, Outline};
+use crate::gpu::typeset::Typeset;
 use crate::gpu::{shader::*, MultisampleTexture, Render, Vao, Vbo};
-use crate::gpu::typeset::TypesetText;
-use crate::spline::Rect;
+use crate::spline::{Point, Rect};
 use std::sync::{Arc, RwLock};
 
 pub struct TextRenderer {
     // Text elements. (Scene graph)
-    content: Vec<TypesetText>,
+    content: Vec<Typeset>,
     // α-texture
     tex: MultisampleTexture,
     fbuf: u32,
@@ -70,8 +70,9 @@ impl TextElement {
 
         // This may extend past the window. We want to clamp it so OpenGL can
         // clip letters that are outside the texture.
-        let tw = f32::min(w, 800.0);
-        let th = f32::min(h, 800.0);
+        let (win_w, win_h) = state.win_dims;
+        let tw = f32::min(w, win_w as f32);
+        let th = f32::min(h, win_h as f32);
 
         // Projects the text element onto the texture.
         let texture_projection = glm::ortho(x0, x0 + tw, y0, y0 + th, 0.0, 100.0);
@@ -107,7 +108,6 @@ impl TextElement {
         gl::DrawArrays(gl::TRIANGLES, 0, self.n as i32);
 
         // Render to the window again.
-        let (win_w, win_h) = state.win_dims;
         gl::Disable(gl::COLOR_LOGIC_OP);
         gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
         gl::Viewport(0, 0, win_w as i32, win_h as i32);
@@ -144,6 +144,44 @@ impl TextElement {
         self.n = ctrl_pts.len() as u32;
     }
 
+    /// Create a single "pseudo-glyph" out of stacked symbols.
+    /// For example: Stack \u{2320} and \u{2321} to create a tall integral.
+    pub unsafe fn stack(top: &str, bot: &str, atlas: &Atlas) -> Self {
+        let top = atlas.outline(&top);
+        let mut bot = atlas.outline(&bot);
+        let dy = bot.bbox.y1;
+        bot.ctrl_pts.extend(
+            top.ctrl_pts
+                .into_iter()
+                // Move the top glyph ctrl pts above the bottom glyph.
+                .map(|(x, y)| (x, y + dy)),
+        );
+
+        let bbox = bot.bbox.extend(Rect {
+            x0: top.bbox.x0,
+            x1: top.bbox.x1,
+            y0: top.bbox.y0 + dy,
+            // We just need a _tiny_ bit more space so the addition plays nicely with rounding and
+            // anti-aliasing.
+            y1: top.bbox.y1 + dy + 1e-2
+        });
+
+        let vao = Vao::<1>::gen();
+        vao.enable_attrib_arrays();
+
+        let vbo = Vbo::gen();
+        vbo.data(&bot.ctrl_pts);
+
+        vao.attrib_ptr(0, 2, gl::FLOAT);
+
+        TextElement {
+            bbox,
+            vao,
+            vbo,
+            n: bot.ctrl_pts.len() as u32,
+        }
+    }
+
     /// Sets up all the buffers to prepare for pushing data.
     pub unsafe fn new(input: &str, atlas: &Atlas) -> Self {
         let Outline { ctrl_pts, bbox } = atlas.outline(input);
@@ -174,7 +212,7 @@ impl Render for TextRenderer {
     type State = TextRendererState;
     unsafe fn invoke(&self, state: &Self::State) {
         for text in &self.content {
-            text.rasterize(self, state);
+            text.rasterize(self, state, &Transform::identity());
         }
     }
 }
@@ -235,22 +273,47 @@ impl TextRenderer {
         }
     }
 
-    pub fn submit(&mut self, text: TypesetText) {
+    pub fn submit(&mut self, text: Typeset) {
         self.content.push(text);
     }
 }
 
 // Really, this could just be a glm::mat4
+#[derive(Debug)]
 pub struct Transform {
     pub scale: f32,
     pub translation: (f32, f32),
 }
 
 impl Transform {
-    fn identity() -> Box<dyn Fn() -> Transform> {
-        Box::new(|| Transform {
+    pub fn identity() -> Self {
+        Transform {
             scale: 1.0,
             translation: (0.0, 0.0),
-        })
+        }
+    }
+
+    /// Compose two transforms.
+    pub fn compose(&self, rhs: &Transform) -> Self {
+        let dx = self.scale * rhs.translation.0 + self.translation.0;
+        let dy = self.scale * rhs.translation.1 + self.translation.1;
+        Transform {
+            scale: self.scale * rhs.scale,
+            translation: (dx, dy),
+        }
+    }
+
+    pub fn translate(&self, dx: f32, dy: f32) -> Transform {
+        Transform {
+            scale: self.scale,
+            translation: (self.translation.0 + dx, self.translation.1 + dy),
+        }
+    }
+
+    pub fn scale(&self, s: f32) -> Transform {
+        Transform {
+            scale: s * self.scale,
+            translation: (self.translation.0, self.translation.1),
+        }
     }
 }

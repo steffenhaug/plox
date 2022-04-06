@@ -1,13 +1,13 @@
 extern crate nalgebra_glm as glm;
 mod util;
 
-use plox::gpu::{
-    text::{SharedText, TextElement, TextRenderer, TextRendererState, Transform},
-    Render,
-    typeset::{TypesetText, Node}
-};
 use plox::atlas::Atlas;
 use plox::font;
+use plox::gpu::{
+    text::{SharedText, TextElement, TextRenderer, TextRendererState, Transform},
+    typeset::{Node, Typeset},
+    Render,
+};
 use plox::spline::Rect;
 
 use glutin::event::{ElementState::*, Event, KeyboardInput, VirtualKeyCode::*, WindowEvent};
@@ -50,30 +50,37 @@ impl<'a> State<'a> {
         let mut text_renderer = TextRenderer::new();
         let atlas = Atlas::new(&font::LM_MATH);
 
+        let lim1 = Typeset::text("\u{1D6FC}", &atlas);
+        let lim2 = Typeset::text("\u{1D6FD}", &atlas);
 
-        let txt = TextElement::new("\u{2207}\u{03B1} = \u{222B}\u{1D453}d\u{03BC}", &atlas);
-        let bbox = txt.bbox;
-        let txt = TypesetText {
-            content: Node::Text(Arc::new(RwLock::new(txt))),
-            bbox,
-            transform: Transform {
-                scale: 90.0,
-                translation: (100.0, 400.0)
-            }
-        };
+        let sum = Typeset::integral(Some(lim1), Some(lim2), &atlas);
 
-        text_renderer.submit(txt);
+        let body = Typeset::text("\u{1D453}(\u{1D467})d\u{1D707}", &atlas);
 
-        let fps = TextElement::new("d", &atlas);
+        let int = Typeset::seq(vec![sum, body])
+            .transform(Transform {
+                scale: 100.0,
+                translation: (200.0, 400.0)
+            });
+
+        let x = TextElement::new("x", &atlas);
+        println!("x = {:?}", x.bbox);
+
+        let i = Typeset::integral(None, None, &atlas).scale(1.0/1.2904);
+        println!("integ = {:?}, T={:?}", i.bbox, i.transform);
+
+        text_renderer.submit(int);
+
+        let fps = TextElement::new(" ", &atlas);
         let bbox = fps.bbox;
         let fps_text = Arc::new(RwLock::new(fps));
-        let fps = TypesetText {
+        let fps = Typeset {
             content: Node::Text(fps_text.clone()),
             bbox,
             transform: Transform {
                 scale: 25.0,
-                translation: (10.0, 10.0)
-            }
+                translation: (10.0, 10.0),
+            },
         };
 
         text_renderer.submit(fps);
