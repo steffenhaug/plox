@@ -192,7 +192,7 @@ impl<'a> State<'a> {
                 .typeset_text(int)
                 .text_shader(colored_text.into())
                 .transform(Transform {
-                    scale: 75.0,
+                    scale: 120.0,
                     translation: (100.0, 200.0),
                 }),
         );
@@ -210,7 +210,7 @@ impl<'a> State<'a> {
 
         content.push(
             Thing::new()
-                .circle(CircleElement::new(100.0).width(3.0).arc(1.0, 2.5))
+                .circle(CircleElement::new(200.0).width(3.0))
                 .transform(Transform {
                     scale: 1.0,
                     translation: (400.0, 400.0),

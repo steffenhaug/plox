@@ -10,7 +10,9 @@ uniform float radius;
 uniform vec2  arc;
 
 void main() {
-    const vec4 outline_color = vec4(0,0,0,1);
+    vec3 C1 = vec3(0.9, 0.0, 0.9);
+    vec3 C2 = vec3(0.0, 0.9, 0.9);
+    const vec4 outline_color = vec4(mix(C1, C2, uv.y), 0.5);
 
     // Polar cordinates (len(r), φ)
     vec2  r   = (width + radius) * (2.0 * uv - 1.0);
@@ -23,10 +25,10 @@ void main() {
     float alpha = 1 - clamp((R + dR) / dR, 0, 1);
 
     // Angular mask
-    float phi_max = mod(arc.y, 2*PI);
-    float phi_min = mod(arc.x, 2*PI);
-    float beta =      step(phi_min, phi)
-               * (1 - step(phi_max, phi));
+    float phi_max = arc.y;
+    float phi_min = arc.x;
+    if (phi_min < phi && phi < phi_max) {
+    color = vec4(outline_color.rgb, alpha*outline_color.a);
+    }
 
-    color = vec4(outline_color.rgb, beta*alpha*outline_color.a);
 }

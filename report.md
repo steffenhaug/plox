@@ -852,3 +852,4 @@ As you can see, this gives a pretty good-looking circle, and the anti-aliasing p
 things already present on the screen. The color on the circle indicates the angle $\varphi$ from
 the $x$-axis, and we use this angle to restrict the circle to a certain part of the circles arc.
 
+# Lines, line splines

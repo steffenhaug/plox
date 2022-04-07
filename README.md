@@ -97,6 +97,10 @@ https://www.sirver.net/blog/2011/08/23/degree-reduction-of-bezier-curves/
 algorithm for tesselating bezier curves
 https://github.com/alexheretic/ab-glyph/blob/master/rasterizer/src/raster.rs
 
+nice lines.
+https://jcgt.org/published/0002/02/08/paper.pdf
+https://developer.nvidia.com/gpugems/gpugems2/part-iii-high-quality-rendering/chapter-22-fast-prefiltered-lines
+
 
 https://crates.io/crates/hyphenation
 
