@@ -1,10 +1,15 @@
+//! # Typesetting
+//!
+//! Typesetting essentially amounts to taking some text, create a VAO for it, and
+//! assign its place in the scene graph so it gets rendered with the correct transform.
 use self::Node::*;
 use crate::atlas::Atlas;
-use crate::gpu::text::{SharedText, TextElement, TextRenderer, TextRendererState, Transform};
+use crate::gpu::text::{SharedText, TextElement, TextShader, TextRenderer};
+use crate::gpu::Transform;
 use crate::spline::Rect;
 use std::sync::{Arc, RwLock};
 
-pub enum Node {
+enum Node {
     // Just plain old text. (Leaf node)
     Text(SharedText),
     // Sequence (multiple typeset text elements after one another)
@@ -19,11 +24,12 @@ pub enum Node {
     // - sub/superscript
     // - fractions
     // - radicals
+    // - vectors (can be done using bold notation)
 }
 
 /// A Typeset text element is essentially a scene graph.
 pub struct Typeset {
-    pub content: Node,
+    content: Node,
     pub bbox: Rect,
     // Transform relative to the parent node.
     pub transform: Box<dyn Fn() -> Transform>,
@@ -53,6 +59,15 @@ impl Typeset {
             content: Node::Text(Arc::new(RwLock::new(content))),
             bbox,
             transform: Box::new(|| Transform::identity()),
+        }
+    }
+
+    pub unsafe fn elem(arc: Arc<RwLock<TextElement>>) -> Typeset {
+        let bbox = arc.read().unwrap().bbox;
+        Typeset {
+            content: Node::Text(arc),
+            bbox,
+            transform: Box::new(|| Transform::identity())
         }
     }
 
@@ -127,18 +142,18 @@ impl Typeset {
         }))
     }
 
-    pub unsafe fn rasterize(
+    pub unsafe fn traverse_scenegraph(
         &self,
         renderer: &TextRenderer,
-        state: &TextRendererState,
         transform_so_far: &Transform,
+        text_shader: &TextShader
     ) {
         let transform = transform_so_far.compose(&(self.transform)());
         match &self.content {
             // For a simple text box, simply rasterize it.
             Text(arc) => {
                 let text = arc.read().unwrap();
-                text.rasterize(renderer, state, &transform);
+                text.rasterize(renderer, &transform, text_shader);
             }
             // For a sequence of text object defined in their own coordinate system,
             // we need to iterate and drawthem offset corrctly relative to the leftmost
@@ -151,7 +166,7 @@ impl Typeset {
                     let text_tr = (text.transform)();
                     dx += transform.scale * text_tr.scale * text.bbox.x0;
                     let transform = transform.translate(dx.round(), 0.0);
-                    text.rasterize(renderer, state, &transform);
+                    text.traverse_scenegraph(renderer, &transform, text_shader);
                     // Apply transformation past the text element.
                     dx += transform.scale * text_tr.scale * text.bbox.x1;
                 }
@@ -164,7 +179,7 @@ impl Typeset {
                 hi_limit: hi_opt,
                 text: int,
             } => {
-                int.rasterize(renderer, state, &transform);
+                int.traverse_scenegraph(renderer, &transform, text_shader);
 
                 // Limit scale-down factor.
                 let ds = 0.7;
@@ -185,7 +200,7 @@ impl Typeset {
                         // And then scale down.
                         .scale(ds);
 
-                    lim.rasterize(renderer, state, &transform);
+                    lim.traverse_scenegraph(renderer, &transform, text_shader);
                 }
 
                 if let Some(lim) = hi_opt {
@@ -202,7 +217,7 @@ impl Typeset {
                         // And then scale down.
                         .scale(ds);
 
-                    lim.rasterize(renderer, state, &transform);
+                    lim.traverse_scenegraph(renderer, &transform, text_shader);
                 }
             }
         }

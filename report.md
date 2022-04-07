@@ -801,4 +801,51 @@ automatic merging of glyphs from the font atlas.
 
 Now we are getting somewhere. The kerning and scale adjustments are selected to approximately mimic
 \LaTeX. 
+Of course, there are many more types of equations to typeset than integrals, but I will leave it at
+this proof of concept for now, because I hope that it might be feasible to integrate a "proper"
+\TeX compiler down the line
+([This dead project](https://github.com/ReTeX/ReX) looks mostly usable but it does font-related stuff in really strange ways)
+, and I'd rather move on to writing other geometry.
+
+# Circles, points and circle arcs
+Finally, we can leave the land of implicit geometry and do something relatively easy.
+Circles, as we know, has an explicit definition: $x^2 + y^2 = R^2$.
+There are still some questions to answer, such as how do we make a _nice_ anti-aliased circle
+with variable thickness, and how do we render just part of the circles arc?
+The simplest thing to reach for is a textured quad, of course. It just needs to be big enough to
+contain $2WR$, where $W$ is the circles width, and $R$ is the circles radius.
+
+To get anti-aliasing we can use one of my favorite tricks:
+Given a quantity `R`, `fwidth(R)` gives the screen-space derivative of this quantity,
+$\mathtt{dR} = |\partial \mathtt R / \partial x + \partial \mathtt R / \partial y|$ in screen space coordinates.
+Clearly, 
+$$
+\frac {\mathtt R} {\mathtt{dR}} \in (0, 1)
+\iff
+\mathtt R \in (0, \mathtt{dR})
+$$
+So anywhere where $\mathtt R \approx 0$, we can map a fragments distance to the point where a value
+is zero into the range $(0, 1)$!
+The trick is to formulate our equation in such a way that zero is on the boundary, negative values
+is on the inside, and positive values on the outside. This is accomplished by calculating the
+signed distance from the circle, $|\vec r| - R$, taking its absolute value and subtracting the
+width of the circle:
+$$
+\mathtt{abs}(|\vec r| - R) - w
+$$
+Now, any fragments whose distance to the circle is less than $w$ will yield a
+negative value, and the alpha can simply be calculated as:
+$$
+\mathtt{alpha} = 1 - \frac {\mathtt R + \mathtt {dR}} {\mathtt{dR}}
+$$
+The addition of `dR` to `R` simply moves the "fade" 1 pixel closer to the ring.
+This is an extremely minor detail, but it makes the circle cover _exactly_ how many pixels we set
+as the width, instead of one more to each side.
+
+![](report/circle_with_aa.png)
+![](report/circle_with_aa_zoom.png)
+
+As you can see, this gives a pretty good-looking circle, and the anti-aliasing plays nicely with
+things already present on the screen. The color on the circle indicates the angle $\varphi$ from
+the $x$-axis, and we use this angle to restrict the circle to a certain part of the circles arc.
 

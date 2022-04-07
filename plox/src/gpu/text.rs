@@ -1,13 +1,12 @@
 //! # Text Renderer implementation.
 use crate::atlas::{Atlas, Outline};
-use crate::gpu::typeset::Typeset;
-use crate::gpu::{shader::*, MultisampleTexture, Render, Vao, Vbo};
-use crate::spline::{Point, Rect};
+use crate::gpu::{Transform, self, shader::*, MultisampleTexture, Vao, Vbo};
+use crate::spline::Rect;
 use std::sync::{Arc, RwLock};
 
+/// Contains everything necessary to rasterize the alpha-texture.
+/// This texture may then be sampled by a `TextShader`.
 pub struct TextRenderer {
-    // Text elements. (Scene graph)
-    content: Vec<Typeset>,
     // α-texture
     tex: MultisampleTexture,
     fbuf: u32,
@@ -16,17 +15,42 @@ pub struct TextRenderer {
     fill_mvp: UniformMat4,
     outline: Shader,
     outline_mvp: UniformMat4,
-    // Shader to blit the α-texture.
-    sample: Shader,
-    sample_mvp: UniformMat4,
-    u_tex_dims: UniformVec2i,
-    u_bbox: UniformVec4,
 }
 
-/// Buffer oject + transform.
+/// A text shader is just a shader that has some required uniforms
+/// to rasterize from the provided alpha-texture.
+pub struct TextShader {
+    shader: Shader,
+    u_mvp: UniformMat4,
+    u_bbox: UniformVec4,
+    u_texdims: UniformVec2i,
+}
+
+// Using the from/into to automatically retrieve the needed uniforms for broad classes of shaders.
+impl From<Shader> for TextShader {
+    fn from(shader: Shader) -> TextShader {
+        // The fact that the shader exists in the first place guarantees that an opengl context
+        // exists, and that asking for a uniform is well defined. but this can panic, and i'm not
+        // 100% sure if From is actually allowed to panic.
+        //
+        // oh well, sorry to whoever might accidentally read this
+        unsafe {
+            let u_mvp = shader.uniform("mvp");
+            let u_texdims = shader.uniform("tex_dims");
+            let u_bbox = shader.uniform("bbox");
+
+            TextShader {
+                shader,
+                u_mvp,
+                u_bbox,
+                u_texdims,
+            }
+        }
+    }
+}
+
+/// A text element is "just the data": Vertex array and bounding box.
 pub struct TextElement {
-    // Transform can compute a transform based on the application state.
-    // This is a bit spahetti, but it makes animation possible.
     pub bbox: Rect,
     vao: Vao<1>,
     vbo: Vbo,
@@ -34,16 +58,15 @@ pub struct TextElement {
 }
 
 /// The Arc-type allows animating by mutating the scene graph externally.
+/// This is turbo-spaghetti but okay for now
 pub type SharedText = Arc<RwLock<TextElement>>;
 
 impl TextElement {
     pub unsafe fn rasterize(
         &self,
-        // The renderer to draw with (Shaders for α-texture)
         renderer: &TextRenderer,
-        // The state the renderer was invoked with.
-        state: &TextRendererState,
         transform: &Transform,
+        text_shader: &TextShader,
     ) {
         self.vao.bind();
 
@@ -71,12 +94,12 @@ impl TextElement {
         // This can be "fixed" by using a massive texture. This will invoke fragment processing of
         // off-screen fragments, but it is actually not as costly as you would think, since
         // the fragment shader is cheap, and the vertex processing (where the magic happens) has
-        // to be done anyways.
+        // to be done anyways. Still far from ideal, but oh well.
 
         let tw = 4096.0;
         let th = 4096.0;
 
-        // Projects the text element onto the (4K) texture.
+        // Projects the text element onto the texture.
         let texture_projection = glm::ortho(x0, x0 + tw, y0, y0 + th, 0.0, 100.0);
         let texture_scale = glm::scaling(&glm::vec3(scale, scale, 0.0));
         let texture_mvp = texture_projection * texture_scale;
@@ -84,6 +107,9 @@ impl TextElement {
         //
         // Rasterize α-texture.
         //
+
+        // Save the old viewport.
+        let (vp_x, vp_y, vp_w, vp_h) = gpu::gl_viewport();
 
         // Look at a correctly sized box in the texture.
         gl::BindFramebuffer(gl::FRAMEBUFFER, renderer.fbuf);
@@ -109,27 +135,26 @@ impl TextElement {
         u_mvp.data(&texture_mvp);
         gl::DrawArrays(gl::TRIANGLES, 0, self.n as i32);
 
-        // Render to the window again.
+        // Unbind framebuffer, and restore the old viewport.
         gl::Disable(gl::COLOR_LOGIC_OP);
         gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
-        let (win_w, win_h) = state.win_dims;
-        gl::Viewport(0, 0, win_w as i32, win_h as i32);
+        gl::Viewport(vp_x, vp_y, vp_w, vp_h);
 
         //
         // Draw a quad sampling the α-texture.
         //
 
-        renderer.sample.bind();
+        text_shader.shader.bind();
 
         // Submit data about the quad.
-        renderer.u_bbox.data(x0, y0, x1, y1);
-        renderer.u_tex_dims.data(w as i32, h as i32);
+        text_shader.u_bbox.data(x0, y0, x1, y1);
+        text_shader.u_texdims.data(w as i32, h as i32);
 
         // Window projection.
-        let window_projection = glm::ortho(0.0, win_w as f32, 0.0, win_h as f32, 0.0, 100.0);
+        let window_projection = glm::ortho(0.0, vp_w as f32, 0.0, vp_h as f32, 0.0, 100.0);
         let model_matrix = glm::translation(&glm::vec3(x.floor(), y.floor(), 0.0));
         let window_mvp = window_projection * model_matrix;
-        let u_mvp = &renderer.sample_mvp;
+        let u_mvp = &text_shader.u_mvp;
         u_mvp.data(&window_mvp);
 
         // Bind the texture we just rasterized to.
@@ -210,15 +235,6 @@ pub struct TextRendererState {
     pub win_dims: (u32, u32),
 }
 
-impl Render for TextRenderer {
-    type State = TextRendererState;
-    unsafe fn invoke(&self, state: &Self::State) {
-        for text in &self.content {
-            text.rasterize(self, state, &Transform::identity());
-        }
-    }
-}
-
 impl TextRenderer {
     pub unsafe fn new() -> Self {
         //
@@ -229,11 +245,6 @@ impl TextRenderer {
 
         let outline = Shader::outline();
         let outline_mvp = fill.uniform("mvp");
-
-        let sample = Shader::sample();
-        let u_tex_dims = sample.uniform("tex_dims");
-        let u_bbox = sample.uniform("bbox");
-        let sample_mvp = sample.uniform("mvp");
 
         //
         // Set up α-texture. (See report for what this does)
@@ -263,57 +274,8 @@ impl TextRenderer {
             fill_mvp,
             outline,
             outline_mvp,
-            sample,
-            sample_mvp,
-            u_tex_dims,
-            u_bbox,
             tex,
             fbuf,
-            content: vec![],
-        }
-    }
-
-    pub fn submit(&mut self, text: Typeset) {
-        self.content.push(text);
-    }
-}
-
-// Really, this could just be a glm::mat4
-#[derive(Debug)]
-pub struct Transform {
-    pub scale: f32,
-    pub translation: (f32, f32),
-}
-
-impl Transform {
-    pub fn identity() -> Self {
-        Transform {
-            scale: 1.0,
-            translation: (0.0, 0.0),
-        }
-    }
-
-    /// Compose two transforms.
-    pub fn compose(&self, rhs: &Transform) -> Self {
-        let dx = self.scale * rhs.translation.0 + self.translation.0;
-        let dy = self.scale * rhs.translation.1 + self.translation.1;
-        Transform {
-            scale: self.scale * rhs.scale,
-            translation: (dx, dy),
-        }
-    }
-
-    pub fn translate(&self, dx: f32, dy: f32) -> Transform {
-        Transform {
-            scale: self.scale,
-            translation: (self.translation.0 + dx, self.translation.1 + dy),
-        }
-    }
-
-    pub fn scale(&self, s: f32) -> Transform {
-        Transform {
-            scale: s * self.scale,
-            translation: (self.translation.0, self.translation.1),
         }
     }
 }

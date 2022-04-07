@@ -50,18 +50,18 @@ a possible optimization.
 7. typesetting of non-character bezier-curve based things (axes, tick marks, etc)
 
 ## immediate to-do list:
+- ECS restructure
+    - animation done via an update system?
 - profiling, tracing and logging
 - line breaking algorithm (i think this is easy) needed for labels if they get long
     without justification, just group characters separated by space
         - push the text if it fits
         - if the text would extend past right margin, reset cursor x to zero and
           add baseline-skip to cursor y
-- drawing outlines of boxes for debugging
-    - line shader: dashed, dotted, etc
-- clean up the interface to the blitting shader so em-coordinates is avialable in the fragment
-  shader
 
 ## future work
+- restructure rasterization of typeset expressions to mask the whole expression in one go and then rasterize
+    - saves a lot of shader switches
 - latex parser or some shit
 - run Lua/Fennel in a separate thread with an event loop proxy
 - better gl abstraction or use vulkan
@@ -93,6 +93,12 @@ FontForge to inspect curve data
 
 curve preprocessing:
 https://www.sirver.net/blog/2011/08/23/degree-reduction-of-bezier-curves/
+
+algorithm for tesselating bezier curves
+https://github.com/alexheretic/ab-glyph/blob/master/rasterizer/src/raster.rs
+
+
+https://crates.io/crates/hyphenation
 
 ### opengl in general
 https://www.glprogramming.com/red/chapter10.html

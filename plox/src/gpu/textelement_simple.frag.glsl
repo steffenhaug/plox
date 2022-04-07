@@ -20,7 +20,5 @@ void main() {
 
     alpha /= float(N);
 
-    vec3 col = vec3(0,uv);
-
-    color = vec4(col, clamp(alpha, 0.05, 1.0));
+    color = vec4(0, 0, 0, clamp(alpha, 0.0, 1.0));
 }

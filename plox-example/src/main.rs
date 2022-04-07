@@ -4,9 +4,11 @@ mod util;
 use plox::atlas::Atlas;
 use plox::font;
 use plox::gpu::{
-    text::{TextElement, TextRenderer, TextRendererState, Transform},
-    typeset::{Node, Typeset},
-    Render,
+    circle::{CircleElement, CircleRenderer},
+    shader::Shader,
+    text::{TextElement, TextRenderer, TextShader},
+    typeset::Typeset,
+    Transform,
 };
 
 use glutin::event::{ElementState::*, Event, KeyboardInput, VirtualKeyCode::*, WindowEvent};
@@ -26,17 +28,137 @@ pub struct State<'a> {
     atlas: Atlas<'a>,
     win_dims: (u32, u32),
     mouse: Mutable<(f32, f32)>,
-    fps_text: Mutable<TextElement>,
+    fps: Mutable<TextElement>,
+    // Text renderer.
     text_renderer: TextRenderer,
+    default_text_shader: TextShader,
+    // Circle renderer.
+    circle_renderer: CircleRenderer,
+    // All the renderable objects.
+    ecs: Ecs,
 }
 
-/// Performs drawing operations.
+/// Behold: The worlds most shit ECS! (Confirmed world record)
+
+struct Thing {
+    typeset_text_component: Option<Typeset>,
+    text_shader_component: Option<TextShader>,
+    transform_component: Option<Transform>,
+    animation_component: Option<Arc<dyn Fn() -> Transform>>,
+    circle_component: Option<CircleElement>,
+}
+
+struct Ecs {
+    content: Vec<Thing>,
+}
+
+impl Thing {
+    /// Create a thing with no components.
+    fn new() -> Self {
+        Thing {
+            typeset_text_component: None,
+            text_shader_component: None,
+            transform_component: None,
+            animation_component: None,
+            circle_component: None,
+        }
+    }
+
+    /// Effectively deletes without forcing O(n) reallocation of the ECS.
+    #[allow(dead_code)]
+    fn nuke(&mut self) {
+        *self = Thing::new();
+    }
+
+    // Builder pattern for adding components.
+
+    fn typeset_text(mut self, text: Typeset) -> Self {
+        self.typeset_text_component = Some(text);
+        self
+    }
+
+    fn text_shader(mut self, shader: TextShader) -> Self {
+        self.text_shader_component = Some(shader);
+        self
+    }
+
+    fn transform(mut self, transform: Transform) -> Self {
+        self.transform_component = Some(transform);
+        self
+    }
+
+    fn animation(mut self, anim: impl 'static + Fn() -> Transform) -> Self {
+        self.animation_component = Some(Arc::new(anim));
+        self
+    }
+
+    fn circle(mut self, circle: CircleElement) -> Self {
+        self.circle_component = Some(circle);
+        self
+    }
+
+    // Accessors for filter_map based systems.
+
+    fn typeset_text_component(
+        &self,
+    ) -> Option<(&Typeset, Option<&Transform>, Option<&TextShader>)> {
+        self.typeset_text_component.as_ref().map(|typeset| {
+            (
+                typeset,
+                self.transform_component.as_ref(),
+                self.text_shader_component.as_ref(),
+            )
+        })
+    }
+
+    fn circle_component(&self) -> Option<(&CircleElement, Option<&Transform>)> {
+        self.circle_component
+            .as_ref()
+            .map(|circ| (circ, self.transform_component.as_ref()))
+    }
+
+    fn animation_component(
+        &mut self,
+    ) -> Option<(&Arc<dyn Fn() -> Transform>, &mut Option<Transform>)> {
+        self.animation_component
+            .as_ref()
+            .map(|anim| (anim, &mut self.transform_component))
+    }
+}
+
+/// Animation system
+fn animate(state: &mut State) {
+    for (anim, maybe_transform) in state
+        .ecs
+        .content
+        .iter_mut()
+        .filter_map(Thing::animation_component)
+    {
+        *maybe_transform = Some(anim());
+    }
+}
+
+/// Rendering "system" :v)
 unsafe fn render(state: &State) {
     gl::ClearColor(1.0, 1.0, 1.0, 1.0);
     gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-    state.text_renderer.invoke(&TextRendererState {
-        win_dims: state.win_dims,
-    });
+
+    // A default transform to substitute if a renderable lacks a transform.
+    let id = Transform::identity();
+
+    for thing in &state.ecs.content {
+        if let Some((renderable, maybe_transform, maybe_shader)) = thing.typeset_text_component() {
+            // Substitute default text shader in the absence of a specific one.
+            let text_shader = maybe_shader.unwrap_or(&state.default_text_shader);
+            let text_transform = maybe_transform.unwrap_or(&id);
+            renderable.traverse_scenegraph(&state.text_renderer, text_transform, text_shader);
+        }
+
+        if let Some((circle, maybe_transform)) = thing.circle_component() {
+            let circle_transform = maybe_transform.unwrap_or(&id);
+            circle.rasterize(&state.circle_renderer, circle_transform);
+        }
+    }
 }
 
 impl<'a> State<'a> {
@@ -44,47 +166,70 @@ impl<'a> State<'a> {
     /// This involves, among other things, compiling and linking shaders,
     /// which means you need a valid GL context, which makes this unsafe.
     unsafe fn new() -> State<'a> {
-        let mut text_renderer = TextRenderer::new();
+        let text_renderer = TextRenderer::new();
+        let circle_renderer = CircleRenderer::new();
         let atlas = Atlas::new(&font::LM_MATH);
+        let default_text_shader = Shader::simple_blit();
+        let colored_text = Shader::fancy_blit();
 
-        // shared mouse position
+        // Shared mouse position
         let mouse = Arc::new(RwLock::new((0.0, 0.0)));
 
         // Typeset a test integral
         let lim1 = Typeset::text("Ω", &atlas);
         let sum = Typeset::integral(Some(lim1), None, &atlas);
-        let body = Typeset::text("\u{1D453}(\u{1D467})d\u{1D467}", &atlas);
+        let body = Typeset::text("\u{1D453}(\u{1D465})d\u{1D707}(\u{1D465})", &atlas);
 
         // Give it translation defined by mouse position.
         let m = mouse.clone();
-        let int = Typeset::seq(vec![sum, body]).transform(Box::new(move || Transform {
-            scale: f32::max(50.0, 2.0 * m.read().unwrap().1 - 400.0),
-            translation: *m.read().unwrap(),
-        }));
 
-        // Submit it to the renderer.
-        text_renderer.submit(int);
+        let int = Typeset::seq(vec![sum, body]);
 
-        let fps = TextElement::new(" ", &atlas);
-        let bbox = fps.bbox;
-        let fps_text = Arc::new(RwLock::new(fps));
-        let fps = Typeset {
-            content: Node::Text(fps_text.clone()),
-            bbox,
-            transform: Box::new(|| Transform {
-                scale: 25.0,
-                translation: (10.0, 10.0),
-            }),
-        };
+        let mut content = Vec::with_capacity(32);
 
-        text_renderer.submit(fps);
+        content.push(
+            Thing::new()
+                .typeset_text(int)
+                .text_shader(colored_text.into())
+                .transform(Transform {
+                    scale: 75.0,
+                    translation: (100.0, 200.0),
+                }),
+        );
+
+        let fps = Arc::new(RwLock::new(TextElement::new(" ", &atlas)));
+
+        content.push(
+            Thing::new()
+                .typeset_text(Typeset::elem(fps.clone()))
+                .transform(Transform {
+                    scale: 16.6,
+                    translation: (10.0, 10.0),
+                }),
+        );
+
+        content.push(
+            Thing::new()
+                .circle(CircleElement::new(100.0).width(2.0))
+                .transform(Transform {
+                    scale: 1.0,
+                    translation: (400.0, 400.0),
+                })
+                .animation(move || Transform {
+                    scale: f32::max(50.0, 2.0 * m.read().unwrap().1 - 400.0),
+                    translation: *m.read().unwrap(),
+                }),
+        );
 
         State {
             win_dims: (SCREEN_W, SCREEN_H),
             mouse,
             atlas,
-            fps_text,
+            fps,
             text_renderer,
+            default_text_shader: default_text_shader.into(),
+            circle_renderer,
+            ecs: Ecs { content },
         }
     }
 }
@@ -174,11 +319,13 @@ fn main() {
             //     by resizing
             //  2. We explicitly request it.
             Event::RedrawRequested(_) => {
+                // Update animations at the start of the frame.
+                animate(&mut state);
                 unsafe {
                     let beg = std::time::Instant::now();
                     render(&state);
                     let end = std::time::Instant::now();
-                    state.fps_text.write().unwrap().update(
+                    state.fps.write().unwrap().update(
                         &format!(
                             "Δt = {}ns ({}ms)",
                             (end - beg).as_nanos(),

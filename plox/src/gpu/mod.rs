@@ -17,6 +17,7 @@
 //! supply some default parameters to avoid misuse.
 pub mod shader;
 pub mod text; // text rendering
+pub mod circle; // circle, circle arc rendering
 pub mod typeset;
 
 use gl::types::*;
@@ -71,6 +72,17 @@ pub fn gl_buf_size<T>(val: &[T]) -> GLsizeiptr {
 #[inline(always)]
 pub fn gl_ptr<T>(val: &[T]) -> *const GLvoid {
     val.as_ptr() as *const GLvoid
+}
+
+#[inline(always)]
+pub fn gl_mut_ptr<T>(val: &mut [T]) -> *mut GLvoid {
+    val.as_ptr() as *mut GLvoid
+}
+
+pub unsafe fn gl_viewport() -> (GLint, GLint, GLint, GLint) {
+    let mut vp = [0; 4];
+    gl::GetIntegerv(gl::VIEWPORT, gl_mut_ptr(&mut vp) as *mut i32);
+    (vp[0], vp[1], vp[2], vp[3])
 }
 
 //
@@ -226,5 +238,46 @@ impl MultisampleTexture {
 
         gl::BindTexture(gl::TEXTURE_2D_MULTISAMPLE, 0);
         MultisampleTexture { tex }
+    }
+}
+
+
+// Really, this could just be a glm::mat4
+#[derive(Debug)]
+pub struct Transform {
+    pub scale: f32,
+    pub translation: (f32, f32),
+}
+
+impl Transform {
+    pub fn identity() -> Self {
+        Transform {
+            scale: 1.0,
+            translation: (0.0, 0.0),
+        }
+    }
+
+    /// Compose two transforms.
+    pub fn compose(&self, rhs: &Transform) -> Self {
+        let dx = self.scale * rhs.translation.0 + self.translation.0;
+        let dy = self.scale * rhs.translation.1 + self.translation.1;
+        Transform {
+            scale: self.scale * rhs.scale,
+            translation: (dx, dy),
+        }
+    }
+
+    pub fn translate(&self, dx: f32, dy: f32) -> Transform {
+        Transform {
+            scale: self.scale,
+            translation: (self.translation.0 + dx, self.translation.1 + dy),
+        }
+    }
+
+    pub fn scale(&self, s: f32) -> Transform {
+        Transform {
+            scale: s * self.scale,
+            translation: (self.translation.0, self.translation.1),
+        }
     }
 }
