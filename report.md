@@ -803,17 +803,17 @@ Now we are getting somewhere. The kerning and scale adjustments are selected to 
 \LaTeX. 
 Of course, there are many more types of equations to typeset than integrals, but I will leave it at
 this proof of concept for now, because I hope that it might be feasible to integrate a "proper"
-\TeX compiler down the line
-([This dead project](https://github.com/ReTeX/ReX) looks mostly usable but it does font-related stuff in really strange ways)
-, and I'd rather move on to writing other geometry.
+\TeX\ compiler down the line
+([This dead project](https://github.com/ReTeX/ReX) looks mostly usable but it does font-related stuff in really strange ways),
+and I'd rather move on to writing other geometry.
 
 # Circles, points and circle arcs
 Finally, we can leave the land of implicit geometry and do something relatively easy.
-Circles, as we know, has an explicit definition: $x^2 + y^2 = R^2$.
+Circles, as we know, has an explicit definition: $x^2 + y^2 = r^2$.
 There are still some questions to answer, such as how do we make a _nice_ anti-aliased circle
 with variable thickness, and how do we render just part of the circles arc?
 The simplest thing to reach for is a textured quad, of course. It just needs to be big enough to
-contain $2WR$, where $W$ is the circles width, and $R$ is the circles radius.
+contain $2wr$, where $w$ is the circles width, and $r$ is the circles radius.
 
 To get anti-aliasing we can use one of my favorite tricks:
 Given a quantity `R`, `fwidth(R)` gives the screen-space derivative of this quantity,
@@ -831,13 +831,16 @@ is on the inside, and positive values on the outside. This is accomplished by ca
 signed distance from the circle, $|\vec r| - R$, taking its absolute value and subtracting the
 width of the circle:
 $$
-\mathtt{abs}(|\vec r| - R) - w
+\mathtt R = \mathtt{abs}(|\vec r| - r) - w
 $$
 Now, any fragments whose distance to the circle is less than $w$ will yield a
 negative value, and the alpha can simply be calculated as:
 $$
 \mathtt{alpha} = 1 - \frac {\mathtt R + \mathtt {dR}} {\mathtt{dR}}
 $$
+The big advantage of this is that the anti-aliasing is guaranteed to only be one pixel wide
+exactly, as opposed to using something like smoothstep, in which case anti-aliasing would become
+blurryer with increased scale.
 The addition of `dR` to `R` simply moves the "fade" 1 pixel closer to the ring.
 This is an extremely minor detail, but it makes the circle cover _exactly_ how many pixels we set
 as the width, instead of one more to each side.

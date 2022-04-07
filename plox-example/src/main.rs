@@ -210,7 +210,7 @@ impl<'a> State<'a> {
 
         content.push(
             Thing::new()
-                .circle(CircleElement::new(100.0).width(2.0))
+                .circle(CircleElement::new(100.0).width(3.0).arc(1.0, 2.5))
                 .transform(Transform {
                     scale: 1.0,
                     translation: (400.0, 400.0),
