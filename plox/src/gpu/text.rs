@@ -137,6 +137,7 @@ impl TextElement {
 
         // Unbind framebuffer, and restore the old viewport.
         gl::Disable(gl::COLOR_LOGIC_OP);
+        gl::Enable(gl::BLEND);
         gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
         gl::Viewport(vp_x, vp_y, vp_w, vp_h);
 

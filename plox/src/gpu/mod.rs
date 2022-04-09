@@ -225,7 +225,7 @@ impl MultisampleTexture {
         gl::TexImage2DMultisample(
             gl::TEXTURE_2D_MULTISAMPLE,
             // 16x hard-coded for now. Could tweak this at type level.
-            16,
+            8,
             // A single color channel.
             gl::R8,
             // Negative dims is actually error, so casting a u32

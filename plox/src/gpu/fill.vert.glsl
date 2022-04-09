@@ -10,6 +10,6 @@ uniform mat4 mvp;
 /// rest.
 void main() {
     // This sends the middle control point (index mod 3 = 1) to the origin.
-    float delete_midpoint = abs(gl_VertexID % 3 - 1);
-    gl_Position = mvp * delete_midpoint * vec4(position, 0.0, 1.0);
+    float mask = abs(gl_VertexID % 3 - 1);
+    gl_Position = mvp * vec4(mask * position, 0.0, 1.0);
 }

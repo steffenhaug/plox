@@ -203,7 +203,7 @@ impl<'a> State<'a> {
             Thing::new()
                 .typeset_text(Typeset::elem(fps.clone()))
                 .transform(Transform {
-                    scale: 16.6,
+                    scale: 40.0,
                     translation: (10.0, 10.0),
                 }),
         );
