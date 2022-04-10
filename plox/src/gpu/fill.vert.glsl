@@ -1,7 +1,6 @@
 #version 440
 
 in vec2 position;
-
 uniform mat4 mvp;
 
 /// When drawing the characters mask, we simply replace the

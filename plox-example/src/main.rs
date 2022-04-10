@@ -10,8 +10,7 @@ use plox::gpu::{
     typeset::Typeset,
     Transform,
 };
-use plox::line::Segment;
-use plox::tesselate::tesselate;
+use plox::line::{LineElement, LineRenderer, Segment};
 
 use glutin::event::{ElementState::*, Event, KeyboardInput, VirtualKeyCode::*, WindowEvent};
 use glutin::event_loop::ControlFlow;
@@ -36,6 +35,8 @@ pub struct State<'a> {
     default_text_shader: TextShader,
     // Circle renderer.
     circle_renderer: CircleRenderer,
+    // Line segment renderer.
+    line_renderer: LineRenderer,
     // All the renderable objects.
     ecs: Ecs,
 }
@@ -48,6 +49,7 @@ struct Thing {
     transform_component: Option<Transform>,
     animation_component: Option<Arc<dyn Fn() -> Transform>>,
     circle_component: Option<CircleElement>,
+    line_component: Option<LineElement>,
 }
 
 struct Ecs {
@@ -63,6 +65,7 @@ impl Thing {
             transform_component: None,
             animation_component: None,
             circle_component: None,
+            line_component: None,
         }
     }
 
@@ -96,6 +99,11 @@ impl Thing {
 
     fn circle(mut self, circle: CircleElement) -> Self {
         self.circle_component = Some(circle);
+        self
+    }
+
+    fn line(mut self, line: LineElement) -> Self {
+        self.line_component = Some(line);
         self
     }
 
@@ -170,6 +178,8 @@ impl<'a> State<'a> {
     unsafe fn new() -> State<'a> {
         let text_renderer = TextRenderer::new();
         let circle_renderer = CircleRenderer::new();
+        let line_renderer = LineRenderer::new();
+
         let atlas = Atlas::new(&font::LM_MATH);
         let default_text_shader = Shader::simple_blit();
         let colored_text = Shader::fancy_blit();
@@ -230,9 +240,8 @@ impl<'a> State<'a> {
             glm::vec2(100.0, 200.0),
         ]);
 
-        let (v, idx) = tesselate(spline.segments(), 5.0);
-        dbg!(v);
-        dbg!(idx);
+        let line = LineElement::new(spline.segments(), 3.0);
+        content.push(Thing::new().line(line));
 
         State {
             win_dims: (SCREEN_W, SCREEN_H),
@@ -242,6 +251,7 @@ impl<'a> State<'a> {
             text_renderer,
             default_text_shader: default_text_shader.into(),
             circle_renderer,
+            line_renderer,
             ecs: Ecs { content },
         }
     }
