@@ -13,6 +13,8 @@ pub mod shaping;
 pub mod font;
 pub mod atlas;
 pub mod polynomial;
+pub mod line;
+pub mod tesselate;
 pub mod gpu;
 
 pub use polynomial::Poly;

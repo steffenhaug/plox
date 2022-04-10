@@ -131,7 +131,7 @@ impl Shader {
             return U::wrap(loc);
         }
 
-        panic!("invalid uniform")
+        panic!("invalid uniform {}", name)
     }
 
     unsafe fn uniform_location(&self, name: &str) -> Option<GLint> {

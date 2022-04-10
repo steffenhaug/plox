@@ -10,6 +10,8 @@ use plox::gpu::{
     typeset::Typeset,
     Transform,
 };
+use plox::line::Segment;
+use plox::tesselate::tesselate;
 
 use glutin::event::{ElementState::*, Event, KeyboardInput, VirtualKeyCode::*, WindowEvent};
 use glutin::event_loop::ControlFlow;
@@ -210,7 +212,7 @@ impl<'a> State<'a> {
 
         content.push(
             Thing::new()
-                .circle(CircleElement::new(200.0).width(3.0))
+                .circle(CircleElement::new(200.0).width(20.0).arc(0.3, 1.0))
                 .transform(Transform {
                     scale: 1.0,
                     translation: (400.0, 400.0),
@@ -220,6 +222,17 @@ impl<'a> State<'a> {
                     translation: *m.read().unwrap(),
                 }),
         );
+
+        let spline = Segment::spline(&vec![
+            glm::vec2(100.0, 100.0),
+            glm::vec2(200.0, 100.0),
+            glm::vec2(200.0, 200.0),
+            glm::vec2(100.0, 200.0),
+        ]);
+
+        let (v, idx) = tesselate(spline.segments(), 5.0);
+        dbg!(v);
+        dbg!(idx);
 
         State {
             win_dims: (SCREEN_W, SCREEN_H),

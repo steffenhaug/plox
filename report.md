@@ -850,6 +850,59 @@ as the width, instead of one more to each side.
 
 As you can see, this gives a pretty good-looking circle, and the anti-aliasing plays nicely with
 things already present on the screen. The color on the circle indicates the angle $\varphi$ from
-the $x$-axis, and we use this angle to restrict the circle to a certain part of the circles arc.
+the $x$-axis, and we use this angle to restrict the circle to a certain part of the circles arc:
+Given an arc from $\varphi_1$ to $\varphi_2$, let $\psi \coloneqq (\varphi_1 + \varphi_2) / 2$ --
+the angle halfway between the two.
+Then $\mathtt A \coloneqq \mathtt{abs}(\varphi - \psi) - (\varphi_2 - \psi)$
+is the same kind of function: Zero on the boundary of thecircle arc, positive outside and negative 
+inside. Thus $1 - (\mathtt A + \mathtt{dA}) / \mathtt{dA}$ gives the same kind of anti-aliased mask, 
+and by multiplication of the radial and angular mask, we obtain a nice anti-aliased mask for the 
+circle arc.
+
+![Anti-aliasing in action on a circle arc from .3 to 1 radian.](report/arc_aa.png)
 
 # Lines, line splines
+Another important graphical primitive is lines and line segments.
+Graphics hardware has support for drawing these out of the box, even with anti-aliasing,
+but this feature is not _quite_ good enough.
+The anti-aliasing quality is hardware-dependant, and the line-width can not necessarily
+be arbitrary. Lastly, it is not easy to do arbitrary fragment processing on the lines.
+It is desirable to somehow tesselate the lines.
+
+The straight-forward way to do this is to tesselate a line from point $A$ to point $B$
+with width $w$ and length $L = |B - A|$ as a rectangle. The vectors
+$$
+\hat v = \frac{B - A} {L}
+\quad\text{and}\quad
+\hat w = \begin{pmatrix}
+0 & -1 \\
+1 & 0
+\end{pmatrix} \hat v
+$$
+defines an orthonormal basis in which the line is parallell to the $\hat v$-axis, eminating from 
+the origin.
+A quad 
+$$
+\{ -w \hat v \pm w \hat w, (L + w) \hat v \pm w \hat w \}
+$$
+will cover the line, but this simple approach has some big problems.
+First of all, when drawing lines that are connecting on an angle, the joint will have
+"corners sticking out".
+Secondly, if draw with transparency, the joint would have overlapping fragments where
+the color would be off. This can _not_ be fixed by depth testng, because if the
+line sequence has a self-intersection (a loop) it is _correct_ to draw twice.
+
+We need to offset the vertices at the joint based on the width $w$ and the angle
+between the lines. For line segments $A \rightarrow B \rightarrow C$,
+the angle between them, $\vartheta$, is guven by the vectors
+$\vec u = B - A$ and $\vec v = C - B$:
+$$
+\vartheta = \arccos \frac {\vec u \cdot \vec v} {|\vec u| |\vec v|}
+$$
+and the angle we need to use to adjust the vertices is the half of the compliment
+of this angle
+$$
+\varphi = \frac {\pi - \vartheta} 2
+$$
+By basic trigonometry, $w = K \sin \varphi \implies K = \sfrac{w}{\sin \varphi}$.
+The offset to the vertices is then $\pm K \cos \varphi = w \cot \varphi$.

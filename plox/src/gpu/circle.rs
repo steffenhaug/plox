@@ -63,10 +63,10 @@ impl CircleElement {
 impl CircleRenderer {
     pub unsafe fn new() -> Self {
         let shader = Shader::circle();
-        let u_arc = shader.uniform("arc");
         let u_radius = shader.uniform("radius");
         let u_width = shader.uniform("width");
         let u_mvp = shader.uniform("mvp");
+        let u_arc = shader.uniform("arc");
 
         CircleRenderer {
             phantom_vao: Vao::gen(),
