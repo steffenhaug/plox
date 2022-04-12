@@ -15,6 +15,7 @@ use plox::line::{LineElement, LineRenderer, Segment};
 use glutin::event::{ElementState::*, Event, KeyboardInput, VirtualKeyCode::*, WindowEvent};
 use glutin::event_loop::ControlFlow;
 
+use std::f32::consts::PI;
 use std::ptr;
 use std::sync::{Arc, RwLock};
 
@@ -127,6 +128,12 @@ impl Thing {
             .map(|circ| (circ, self.transform_component.as_ref()))
     }
 
+    fn line_component(&self) -> Option<(&LineElement, Option<&Transform>)> {
+        self.line_component
+            .as_ref()
+            .map(|line| (line, self.transform_component.as_ref()))
+    }
+
     fn animation_component(
         &mut self,
     ) -> Option<(&Arc<dyn Fn() -> Transform>, &mut Option<Transform>)> {
@@ -167,6 +174,15 @@ unsafe fn render(state: &State) {
         if let Some((circle, maybe_transform)) = thing.circle_component() {
             let circle_transform = maybe_transform.unwrap_or(&id);
             circle.rasterize(&state.circle_renderer, circle_transform);
+        }
+
+        if let Some((line, maybe_transform)) = thing.line_component() {
+            let line_transform = maybe_transform.unwrap_or(&id);
+            line.rasterize(
+                &state.line_renderer,
+                line_transform,
+                &state.line_renderer.line_shader,
+            );
         }
     }
 }
@@ -222,7 +238,7 @@ impl<'a> State<'a> {
 
         content.push(
             Thing::new()
-                .circle(CircleElement::new(200.0).width(20.0).arc(0.3, 1.0))
+                .circle(CircleElement::new(200.0).width(3.0).arc(0.3, 5.0))
                 .transform(Transform {
                     scale: 1.0,
                     translation: (400.0, 400.0),
@@ -233,15 +249,23 @@ impl<'a> State<'a> {
                 }),
         );
 
-        let spline = Segment::spline(&vec![
-            glm::vec2(100.0, 100.0),
-            glm::vec2(200.0, 100.0),
-            glm::vec2(200.0, 200.0),
-            glm::vec2(100.0, 200.0),
-        ]);
+        let n = 250;
+        let graph: Vec<glm::Vec2> = (0..n)
+            .map(|i| {
+                let t = 2.0 * PI * (i as f32 / n as f32);
+                let x = 100.0 * t;
+                let y = 50.0 * f32::sin(t);
+                glm::vec2(x, y)
+            })
+            .collect();
 
-        let line = LineElement::new(spline.segments(), 3.0);
-        content.push(Thing::new().line(line));
+        let spline = Segment::spline(&graph);
+
+        let line = LineElement::new(spline.segments(), 150.0);
+        content.push(Thing::new().line(line).transform(Transform {
+            scale: 1.0,
+            translation: (200.0, 600.0),
+        }));
 
         State {
             win_dims: (SCREEN_W, SCREEN_H),

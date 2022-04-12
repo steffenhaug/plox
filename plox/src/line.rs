@@ -1,4 +1,4 @@
-use crate::gpu::shader::{Shader, UniformMat4};
+use crate::gpu::shader::{Shader, UniformFloat, UniformMat4};
 use crate::gpu::{self, Ibo, Transform, Vao, Vbo};
 use crate::tesselate::tesselate;
 use glm::Vec2;
@@ -14,15 +14,17 @@ pub struct LinearSpline {
 }
 
 pub struct LineRenderer {
-    line_shader: Shader,
+    pub line_shader: Shader,
     u_mvp: UniformMat4,
+    u_width: UniformFloat,
 }
 
 pub struct LineElement {
-    vao: Vao<1>,
+    vao: Vao<2>,
     vbo: Vbo,
     ibo: Ibo,
     n_segments: u32,
+    width: f32,
 }
 
 impl Segment {
@@ -82,11 +84,15 @@ impl LineElement {
         let (.., vp_w, vp_h) = gpu::gl_viewport();
         let proj = glm::ortho(0.0, vp_w as f32, 0.0, vp_h as f32, 0.0, 100.0);
         let model = glm::translation(&glm::vec3(x.floor(), y.floor(), 0.0));
-        renderer.u_mvp.data(&(proj * model));
+
         line_shader.bind();
+
+        renderer.u_mvp.data(&(proj * model));
+        renderer.u_width.data(self.width);
+
         gl::DrawElements(
             gl::TRIANGLES,
-            self.n_segments as i32 * 2 + 2,
+            self.n_segments as i32 * 6,
             gl::UNSIGNED_INT,
             std::ptr::null(),
         );
@@ -96,7 +102,7 @@ impl LineElement {
     where
         S: Iterator<Item = &'a Segment>,
     {
-        let (vs, idx) = tesselate(segments, width);
+        let (vs, uvs, idx) = tesselate(segments, width);
 
         let vao = Vao::gen();
         vao.enable_attrib_arrays();
@@ -104,6 +110,10 @@ impl LineElement {
         let vbo = Vbo::gen();
         vbo.data(&vs);
         vao.attrib_ptr(0, 2, gl::FLOAT);
+
+        let vbo = Vbo::gen();
+        vbo.data(&uvs);
+        vao.attrib_ptr(1, 2, gl::FLOAT);
 
         let ibo = Ibo::gen();
         ibo.data(&idx);
@@ -113,6 +123,7 @@ impl LineElement {
             vbo,
             ibo,
             n_segments: vs.len() as u32 / 2 - 1,
+            width,
         }
     }
 }
@@ -121,10 +132,12 @@ impl LineRenderer {
     pub unsafe fn new() -> Self {
         let shader = Shader::line();
         let u_mvp = shader.uniform("mvp");
+        let u_width = shader.uniform("width");
 
         LineRenderer {
             line_shader: shader,
             u_mvp,
+            u_width,
         }
     }
 }

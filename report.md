@@ -906,3 +906,24 @@ $$
 $$
 By basic trigonometry, $w = K \sin \varphi \implies K = \sfrac{w}{\sin \varphi}$.
 The offset to the vertices is then $\pm K \cos \varphi = w \cot \varphi$.
+
+![Rasterized circle arc and curve tesselated as trapezoidal line segments, demonstrating use of texture coordinates.](report/aliased_line_circle.png)
+
+As we can see, this works.
+A gradient is drawn on the tesselated $\sin$-graph to demonstrate
+the texture cordinates on the tesselated curve varying smoothly.
+
+![Finely tesselated graph of the equation $y = \sin x$, demonstratiing that the texture coordinates are nicely behaved as the tesselation gets finer.](report/finely_tesselated_sinus.png)
+
+Drawing a fine tesselation shows that the texture-coordinate mapping is 
+well-behaved even in the limit case.
+
+![A dashed line, achived usign the lines texture coordinates to zero the alpha-channel at regular intervals.](report/dashed_line.png)
+
+One thing we can achieve using the texture coordinates, is the effect of a dashed line.
+Simply zero the alpha periodically along the axis parallell to the curve.
+There is of course no limit to the things a fragment shader can do:
+
+![A shaded curve tesselation with the Mandelbrot set visualized on top.](report/cursed_curved_mandelbrot.png)
+
+# Tesselation of Bézier curves
