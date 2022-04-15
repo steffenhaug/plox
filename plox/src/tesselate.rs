@@ -11,8 +11,8 @@ where
     let mut s2 = None;
 
     // Build a vertex- and index-buffer.
-    let mut verts = Vec::new();
-    let mut uvs = Vec::new();
+    let mut verts = Vec::with_capacity(256);
+    let mut uvs = Vec::with_capacity(256);
     let mut length = 0.0;
 
     // π/2 rotation matrix.
@@ -78,7 +78,7 @@ where
                 let phi = (PI - th) / 2.0;
                 // Calculate the consequtent v-delta.
                 let dv = width * f32::tan(PI / 2.0 - phi);
-                // Note, that which "side" to add and take away from depends
+                // Note that which "side" to add and take away from depends
                 // on which way the line is curving (obviously). The sign of
                 // u's w-component gives this away.
                 let s = f32::signum(w.dot(&u));

@@ -98,6 +98,10 @@ impl LineElement {
         );
     }
 
+    pub unsafe fn line(from: Vec2, to: Vec2, width: f32) -> Self {
+        Self::new([Segment { p1: from, p2: to }].iter(), width)
+    }
+
     pub unsafe fn new<'a, S>(segments: S, width: f32) -> Self
     where
         S: Iterator<Item = &'a Segment>,

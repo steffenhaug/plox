@@ -861,7 +861,7 @@ circle arc.
 
 ![Anti-aliasing in action on a circle arc from .3 to 1 radian.](report/arc_aa.png)
 
-# Lines, line splines
+# Lines and linear splines
 Another important graphical primitive is lines and line segments.
 Graphics hardware has support for drawing these out of the box, even with anti-aliasing,
 but this feature is not _quite_ good enough.
@@ -916,9 +916,9 @@ the texture cordinates on the tesselated curve varying smoothly.
 ![Finely tesselated graph of the equation $y = \sin x$, demonstratiing that the texture coordinates are nicely behaved as the tesselation gets finer.](report/finely_tesselated_sinus.png)
 
 Drawing a fine tesselation shows that the texture-coordinate mapping is 
-well-behaved even in the limit case.
+well-behaved even approaching the limit case.
 
-![A dashed line, achived usign the lines texture coordinates to zero the alpha-channel at regular intervals.](report/dashed_line.png)
+![A dashed line, achieved using the lines texture coordinates to zero the alpha-channel at regular intervals.](report/dashed_line.png)
 
 One thing we can achieve using the texture coordinates, is the effect of a dashed line.
 Simply zero the alpha periodically along the axis parallell to the curve.
@@ -926,4 +926,90 @@ There is of course no limit to the things a fragment shader can do:
 
 ![A shaded curve tesselation with the Mandelbrot set visualized on top.](report/cursed_curved_mandelbrot.png)
 
+Of course this is a bit goofy, and doesn't look good at all, but it proves the point.
+
 # Tesselation of Bézier curves
+The techniques used to fill in the outlines of character glyhps can technically
+be used to rasterize quadratic Bézier curves with simple modifications.
+However, since the edges of the triangle are tangential to the curve in the limit case
+when $t \rightarrow 1$ and $t \rightarrow 0$, there is no real way to draw a Bézier
+curve with any form of thickness, and there is no real way to do anti-aliasing properly.
+Moreover, the technique is only simple for quadratic Bézier curves.
+It can be extended to cubics on a quad, but for anything more it would be ridiculously
+complicated.
+
+On the other hand, tesselating an arbitrary parametric curve is relatively easy.
+We just need a bunch of sample points, and we construct a linear spline of the sort
+outlined in the previous section, and we get arbitrary thickness, antialiasing and texturing
+without doing any work in that department.
+The challenge is that creating an _extremely_ fine tesselation can be costly, especially
+if the curve is highly dynamic and the tesselation might need to be re-calculated often.
+On the other hand, a coarse tesselation will not look good, especially not under magnification.
+It would be nice to be a bit more clever about how we tesselate.
+The idea is to use the curvature of the curve, $\kappa = \kappa (t)$, which is easy to
+calcualte in the case of Bézier curves.
+We want to recursively subdivide the interval $0 < t < 1$ such that the
+length of a segment is inversely proportional to the curvature.
+This recursive subdivision forms a tree, and while we don't technically need to store this,
+storing it would allow us to cheaply re-tesselate parts of the curve without
+re-tesselating the whole thing. This has limited use since it won't apply to
+a highly dynamic curve (changing the control points would invalidate the old tesselation),
+but it would be useful to dynamically refine the curve if we are zooming in on it.
+
+The curvature $\kappa = \kappa(t)$ of a Bézier curve $B$ defines a circle
+with radius $R = \sfrac{1}{\kappa(t)}$ whose circle arc approximates $B$ around
+$t$. How far does $B$ stray away from a straight line approximation around $t$?
+
+![](report/approx.svg)
+
+Clearly, the curves deviation from the circles tangent is approximately $Q = R(1 - \sin \vartheta)$.
+If this value is much bigger than the size of a pixel, we need to refine the tesselation of our curve.
+$$
+Q = R - R\sin \vartheta = R - R \frac R L = \frac 1 \kappa - \frac 1 L
+$$
+This is the error estimate we want to attempt using.
+Initially, my goal is to have $Q < \epsilon = 2\text{px}$.
+$\epsilon = 1\text{px}$ should give perfect lines in all cases, but i think 2px will be indistinguishable
+with anti-aliasing. I really don't think there will be a significant difference if
+the line crosses into the neighbouring pixel incorrectly here and there, and very likely
+we could get away with a _way_ larged $\epsilon$ if we wanted.
+
+## Dynamically refined tesselations
+The idea is to store the B-tree of binary interval partitions in a vector in the same way
+binary heaps store trees:
+
+![](report/btree.png)
+
+Leaf nodes will contain sample points, and interior nodes will contain nodes with metadata
+such as which interval its eventual leaf nodes contain sample points in.
+This variant of a B-tree allows us to _almost_ keep the sample points contiguous in memory,
+so we can get an efficient iterator to tesselate the line with.
+For even better cache-utilization, I want to put several samples in each leaf node,
+this also makes the tree way shallower minimizing the time it takes to traverse it to generate
+the vertex data. Something like this:
+```Rust
+pub struct BTree(Vec<Option<BTreeNode>>);
+
+enum BTreeNode<const N: usize=7> {
+    Leaf {
+        t_min: f32,
+        t_max: f32,
+        samples: [(f32, f32); N]
+    },
+    Interior {
+        t_min: f32,
+        t_max: f32,
+    }
+}
+```
+In which `N` is tunable to make the tree shallower and samples more contiguous, but
+but the granularity of the tesselation might be more prone to overshooting.
+In this B-tree, node `k` has children $2\mathtt k + 1$ and $2 \mathtt k + 2$, and
+parent $(\mathtt k-1)/ 2$ (integer division, i. e. implicitly floored).
+
+In addition to the benefit of a vector-backed storage for cache-utilization, this
+design does not need to use pointers to implement a bi-directional child/parent
+relation, which is notoriously _really_ annoying in Rust.
+Additionally, when refining our partition, new childen nodes will always be appended
+to the _end_ of the vector, and since each node has two children, the array will always
+double when we add a new level of refinement, a vector backed storage is ideal.

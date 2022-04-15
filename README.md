@@ -48,16 +48,20 @@ a possible optimization.
 4. ✅application of transformations to single character (translation and scaling)
 6. ✅ (kinda) typesetting of "latex"
 7. typesetting of non-character bezier-curve based things (axes, tick marks, etc)
+8. typeseting geometric primitives
+    - ✅ circles
+    - ✅ circle arcs
+    - ✅ lines
+    - ✅ linear splines
+9. tesselating parametric curves
+10. window size independence / positioning relative to center etc.
+11. progressively refined tesselation
 
 ## immediate to-do list:
-- ECS restructure
-    - animation done via an update system?
 - profiling, tracing and logging
-- line breaking algorithm (i think this is easy) needed for labels if they get long
-    without justification, just group characters separated by space
-        - push the text if it fits
-        - if the text would extend past right margin, reset cursor x to zero and
-          add baseline-skip to cursor y
+- better input handling and entity updates
+- ECS into library
+- Bézier curve tesselation
 
 ## future work
 - restructure rasterization of typeset expressions to mask the whole expression in one go and then rasterize

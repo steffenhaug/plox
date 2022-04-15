@@ -1,9 +1,9 @@
 //! Polynomials.
-//! 
+//!
 //! Implements what we need to create and manipulate polynomials
 //! of different degrees in the context of Bézier curves.
-use std::f32::consts::PI;
 use crate::approx;
+use std::f32::consts::PI;
 
 /// Polynomial of degree N over the set f32.
 #[derive(Debug)]
@@ -25,6 +25,19 @@ impl Poly<4> {
     pub fn solve(&self) -> Vec<f32> {
         let coeffs = self.0;
         solve_cubic(coeffs[0], coeffs[1], coeffs[2], coeffs[3])
+    }
+
+    pub fn d(&self) -> Poly<3> {
+        let a = self.0[3];
+        let b = self.0[2];
+        let c = self.0[1];
+        Poly([c, 2.0 * b, 3.0 * a])
+    }
+
+    pub fn dd(&self) -> Poly<2> {
+        let a = self.0[3];
+        let b = self.0[2];
+        Poly([2.0 * b, 6.0 * a])
     }
 }
 
@@ -139,4 +152,3 @@ pub fn solve_cubic(c: f32, b: f32, a: f32, d: f32) -> Vec<f32> {
         2.0 * r.cbrt() * f32::cos((phi + 4.0 * PI) / 3.0) - a / 3.0,
     ];
 }
-

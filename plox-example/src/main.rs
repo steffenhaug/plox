@@ -1,6 +1,7 @@
 extern crate nalgebra_glm as glm;
 mod util;
 
+use glm::vec2;
 use plox::atlas::Atlas;
 use plox::font;
 use plox::gpu::{
@@ -11,6 +12,7 @@ use plox::gpu::{
     Transform,
 };
 use plox::line::{LineElement, LineRenderer, Segment};
+use plox::spline::Cubic;
 
 use glutin::event::{ElementState::*, Event, KeyboardInput, VirtualKeyCode::*, WindowEvent};
 use glutin::event_loop::ControlFlow;
@@ -249,19 +251,29 @@ impl<'a> State<'a> {
                 }),
         );
 
-        let n = 250;
-        let graph: Vec<glm::Vec2> = (0..n)
-            .map(|i| {
-                let t = 2.0 * PI * (i as f32 / n as f32);
-                let x = 100.0 * t;
-                let y = 50.0 * f32::sin(t);
-                glm::vec2(x, y)
-            })
-            .collect();
+        let bezier = Cubic::pts(
+            vec2(0.0, 0.0),
+            vec2(200.0, -50.0),
+            vec2(470.0, 250.0),
+            vec2(500.0, 150.0),
+        );
 
-        let spline = Segment::spline(&graph);
+        let cl1 = LineElement::line(bezier.p0, bezier.p1, 2.0);
+        let cl2 = LineElement::line(bezier.p2, bezier.p3, 2.0);
 
-        let line = LineElement::new(spline.segments(), 150.0);
+        let spline = Segment::spline(&bezier.sample());
+        let line = LineElement::new(spline.segments(), 2.0);
+
+        content.push(Thing::new().line(cl1).transform(Transform {
+            scale: 1.0,
+            translation: (200.0, 600.0),
+        }));
+
+        content.push(Thing::new().line(cl2).transform(Transform {
+            scale: 1.0,
+            translation: (200.0, 600.0),
+        }));
+
         content.push(Thing::new().line(line).transform(Transform {
             scale: 1.0,
             translation: (200.0, 600.0),

@@ -4,7 +4,7 @@ use crate::approx;
 use crate::polynomial::Poly;
 use std::ops;
 
-/// A (control) point on a Bézier curve.
+/// A (control) point on a Bézier curve. TODO: Replace with glm::Vec2
 #[derive(Debug, Clone, Copy)]
 pub struct Point {
     pub x: f32,
@@ -345,5 +345,81 @@ impl ops::Mul<Quadratic> for f32 {
 impl std::convert::From<Point> for (f32, f32) {
     fn from(p: Point) -> (f32, f32) {
         (p.x, p.y)
+    }
+}
+
+//
+// Cubic stuff
+//
+
+pub struct Cubic {
+    pub p0: glm::Vec2,
+    pub p1: glm::Vec2,
+    pub p2: glm::Vec2,
+    pub p3: glm::Vec2,
+}
+
+impl Cubic {
+    pub fn pts(p0: glm::Vec2, p1: glm::Vec2, p2: glm::Vec2, p3: glm::Vec2) -> Self {
+        Cubic { p0, p1, p2, p3 }
+    }
+
+    pub fn y(&self) -> Poly<4> {
+        let c = 1.0 * self.p0.y;
+        let b = -3.0 * self.p0.y + 3.0 * self.p1.y;
+        let a = 3.0 * self.p0.y - 6.0 * self.p1.y + 3.0 * self.p2.y;
+        let d = -1.0 * self.p0.y + 3.0 * self.p1.y - 3.0 * self.p2.y + 1.0 * self.p3.y;
+        Poly([c, b, a, d])
+    }
+
+    pub fn x(&self) -> Poly<4> {
+        let c = 1.0 * self.p0.x;
+        let b = -3.0 * self.p0.x + 3.0 * self.p1.x;
+        let a = 3.0 * self.p0.x - 6.0 * self.p1.x + 3.0 * self.p2.x;
+        let d = -1.0 * self.p0.x + 3.0 * self.p1.x - 3.0 * self.p2.x + 1.0 * self.p3.x;
+        Poly([c, b, a, d])
+    }
+
+    pub fn r(&self, t: f32) -> glm::Vec2 {
+        glm::vec2(self.x().at(t), self.y().at(t))
+    }
+
+    pub fn curvature(&self, t: f32) -> f32 {
+        let dx = self.x().d();
+        let ddx = self.x().dd();
+        let dy = self.y().d();
+        let ddy = self.y().dd();
+
+        let kappa = (dx.at(t) * ddy.at(t) - ddx.at(t) * dy.at(t))
+            / (dx.at(t).powi(2) + dy.at(t).powi(2)).powf(3.0 / 2.0);
+
+        kappa
+    }
+
+    pub fn sample(&self) -> Vec<glm::Vec2> {
+        let mut samples = Vec::with_capacity(128);
+        samples.push(self.r(0.0));
+        Self::sample_interval(self, &mut samples, glm::vec2(0.0, 1.0));
+        samples.push(self.r(1.0));
+
+        samples
+    }
+
+    fn sample_interval(curve: &Cubic, samples: &mut Vec<glm::Vec2>, interval: glm::Vec2) {
+        const EPS: f32 = 3.0;
+        let t0 = interval.x;
+        let t1 = interval.y;
+        let t = 0.5 * (t0 + t1);
+
+        // Segment length is a bad, but easy and fast error measure.
+        // Some alternatives are outlined in the report.
+        let l = (curve.r(t) - curve.r(t0)).norm();
+
+        if l < EPS {
+            samples.extend([curve.r(t)]);
+        } else {
+            Self::sample_interval(curve, samples, glm::vec2(t0, t));
+            Self::sample_interval(curve, samples, glm::vec2(t, t1));
+        }
     }
 }
