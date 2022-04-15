@@ -50,7 +50,7 @@ struct Thing {
     typeset_text_component: Option<Typeset>,
     text_shader_component: Option<TextShader>,
     transform_component: Option<Transform>,
-    animation_component: Option<Arc<dyn Fn() -> Transform>>,
+    animation_component: Option<Arc<dyn Fn(&mut Thing)>>,
     circle_component: Option<CircleElement>,
     line_component: Option<LineElement>,
 }
@@ -95,7 +95,7 @@ impl Thing {
         self
     }
 
-    fn animation(mut self, anim: impl 'static + Fn() -> Transform) -> Self {
+    fn animation(mut self, anim: impl 'static + Fn(&mut Thing)) -> Self {
         self.animation_component = Some(Arc::new(anim));
         self
     }
@@ -136,24 +136,24 @@ impl Thing {
             .map(|line| (line, self.transform_component.as_ref()))
     }
 
-    fn animation_component(
-        &mut self,
-    ) -> Option<(&Arc<dyn Fn() -> Transform>, &mut Option<Transform>)> {
-        self.animation_component
-            .as_ref()
-            .map(|anim| (anim, &mut self.transform_component))
+    fn animation_component(&mut self) -> Option<(Arc<dyn Fn(&mut Thing)>, &mut Thing)> {
+        if let Some(anim) = &self.animation_component {
+            return Some((anim.clone(), self));
+        }
+
+        None
     }
 }
 
 /// Animation system
 fn animate(state: &mut State) {
-    for (anim, maybe_transform) in state
+    for (anim, thing) in state
         .ecs
         .content
         .iter_mut()
         .filter_map(Thing::animation_component)
     {
-        *maybe_transform = Some(anim());
+        anim(thing);
     }
 }
 
@@ -245,9 +245,11 @@ impl<'a> State<'a> {
                     scale: 1.0,
                     translation: (400.0, 400.0),
                 })
-                .animation(move || Transform {
-                    scale: f32::max(50.0, 2.0 * m.read().unwrap().1 - 400.0),
-                    translation: *m.read().unwrap(),
+                .animation(move |thing| {
+                    thing.transform_component.replace(Transform {
+                        scale: f32::max(50.0, 2.0 * m.read().unwrap().1 - 400.0),
+                        translation: *m.read().unwrap(),
+                    });
                 }),
         );
 
