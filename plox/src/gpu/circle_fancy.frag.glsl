@@ -15,19 +15,16 @@ vec4 blend(vec4 src, vec4 dst) {
     return vec4((1.0 / alpha_0) * color_0, alpha_0);
 }
 
+
 void main() {
-    const vec4 outline_color = vec4(0,0,0,1);
-    const vec4 fill_color = vec4(1,1,1,1);
+    // Compute some pretty colors.
+    vec3 C1 = vec3(0.9, 0.0, 0.9);
+    vec3 C2 = vec3(0.0, 0.9, 0.9);
+    const vec4 outline_color = vec4(mix(C1, C2, 1-length(uv)), 1.0);
+    const vec4 fill_color = vec4(mix(C1, C2, length(uv)), 1/1.6);
 
     // Polar cordinates (|r|, φ)
     vec2 r = (width + radius) * (2.0 * uv - 1.0);
-
-    // Draw the fill!
-    if (length(r) < radius) {
-        color = fill_color;
-    } else {
-        color = vec4(0,0,0,0);
-    }
 
     // Map [-π, π] -> [0, 2π]
     float phi = mod((atan(r.y, r.x) + 2*PI), 2*PI);
@@ -45,6 +42,7 @@ void main() {
     
     // Draw the circle arc.
     vec4 o_color = vec4(outline_color.rgb, alpha*beta*outline_color.a);
+    vec4 f_color = length(r) < radius ? fill_color : vec4(0,0,0,0);
 
-    color = blend(color, o_color);
+    color = blend(f_color, o_color);
 }

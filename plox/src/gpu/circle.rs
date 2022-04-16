@@ -2,11 +2,34 @@ use crate::gpu::{self, shader::*, Transform, Vao};
 
 pub struct CircleRenderer {
     phantom_vao: Vao<0>,
-    circle_shader: Shader,
+    pub default_circle_shader: CircleShader,
+}
+
+pub struct CircleShader {
+    shader: Shader,
     u_width: UniformFloat,
     u_radius: UniformFloat,
     u_arc: UniformVec2,
     u_mvp: UniformMat4,
+}
+
+impl From<Shader> for CircleShader {
+    fn from(shader: Shader) -> Self {
+        unsafe {
+            let u_width = shader.uniform("width");
+            let u_radius = shader.uniform("radius");
+            let u_arc = shader.uniform("arc");
+            let u_mvp = shader.uniform("mvp");
+
+            CircleShader {
+                shader,
+                u_width,
+                u_radius,
+                u_arc,
+                u_mvp,
+            }
+        }
+    }
 }
 
 pub struct CircleElement {
@@ -20,7 +43,7 @@ impl CircleElement {
         CircleElement {
             width: 1.0,
             radius: r,
-            arc: (-f32::INFINITY, f32::INFINITY)
+            arc: (-f32::INFINITY, f32::INFINITY),
         }
     }
 
@@ -34,7 +57,16 @@ impl CircleElement {
         self
     }
 
-    pub unsafe fn rasterize(&self, renderer: &CircleRenderer, transform: &Transform) {
+    pub fn set_arc(&mut self, from: f32, to: f32) {
+        self.arc = (from, to);
+    }
+
+    pub unsafe fn rasterize(
+        &self,
+        renderer: &CircleRenderer,
+        transform: &Transform,
+        circle_shader: &CircleShader,
+    ) {
         // Compute the circles transform.
         let Transform {
             translation: (x, y),
@@ -47,13 +79,13 @@ impl CircleElement {
 
         // Bind the empty VAO and the circle shader.
         renderer.phantom_vao.bind();
-        renderer.circle_shader.bind();
+        circle_shader.shader.bind();
 
         // Set up uniforms.
-        renderer.u_width.data(self.width);
-        renderer.u_radius.data(self.radius);
-        renderer.u_arc.data(self.arc.0, self.arc.1);
-        renderer.u_mvp.data(&window_mvp);
+        circle_shader.u_width.data(self.width);
+        circle_shader.u_radius.data(self.radius);
+        circle_shader.u_arc.data(self.arc.0, self.arc.1);
+        circle_shader.u_mvp.data(&window_mvp);
 
         // Draw a quad.
         gl::DrawArrays(gl::TRIANGLES, 0, 6);
@@ -63,18 +95,10 @@ impl CircleElement {
 impl CircleRenderer {
     pub unsafe fn new() -> Self {
         let shader = Shader::circle();
-        let u_radius = shader.uniform("radius");
-        let u_width = shader.uniform("width");
-        let u_mvp = shader.uniform("mvp");
-        let u_arc = shader.uniform("arc");
 
         CircleRenderer {
             phantom_vao: Vao::gen(),
-            circle_shader: shader,
-            u_width,
-            u_radius,
-            u_arc,
-            u_mvp,
+            default_circle_shader: shader.into(),
         }
     }
 }

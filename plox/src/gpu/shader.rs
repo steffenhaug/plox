@@ -52,9 +52,11 @@ const TXT_BLIT_FRAG_FANCY: &str = include_str!("textelement_fancy.frag.glsl");
 
 const CIRCLE_VERT: &str = include_str!("circle.vert.glsl");
 const CIRCLE_FRAG: &str = include_str!("circle.frag.glsl");
+const CIRCLE_FRAG_FANCY: &str = include_str!("circle_fancy.frag.glsl");
 
 const LINE_VERT: &str = include_str!("line.vert.glsl");
 const LINE_FRAG: &str = include_str!("line.frag.glsl");
+const LINE_FRAG_FANCY: &str = include_str!("line_fancy.frag.glsl");
 
 impl Shader {
     pub unsafe fn fill() -> Shader {
@@ -117,9 +119,33 @@ impl Shader {
         Shader { shader: program, on_bind: None }
     }
 
+    pub unsafe fn fancy_circle() -> Shader {
+        let vert = Shader::compile(VERTEX_SHADER, CIRCLE_VERT);
+        let frag = Shader::compile(FRAGMENT_SHADER, CIRCLE_FRAG_FANCY);
+        let program = gl::CreateProgram();
+        gl::AttachShader(program, vert);
+        gl::AttachShader(program, frag);
+        Shader::link(program);
+        gl::DeleteShader(vert);
+        gl::DeleteShader(frag);
+        Shader { shader: program, on_bind: None }
+    }
+
     pub unsafe fn line() -> Shader {
         let vert = Shader::compile(VERTEX_SHADER, LINE_VERT);
         let frag = Shader::compile(FRAGMENT_SHADER, LINE_FRAG);
+        let program = gl::CreateProgram();
+        gl::AttachShader(program, vert);
+        gl::AttachShader(program, frag);
+        Shader::link(program);
+        gl::DeleteShader(vert);
+        gl::DeleteShader(frag);
+        Shader { shader: program, on_bind: None }
+    }
+
+    pub unsafe fn fancy_line() -> Shader {
+        let vert = Shader::compile(VERTEX_SHADER, LINE_VERT);
+        let frag = Shader::compile(FRAGMENT_SHADER, LINE_FRAG_FANCY);
         let program = gl::CreateProgram();
         gl::AttachShader(program, vert);
         gl::AttachShader(program, frag);

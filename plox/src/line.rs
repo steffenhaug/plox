@@ -14,14 +14,34 @@ pub struct LinearSpline {
 }
 
 pub struct LineRenderer {
-    pub line_shader: Shader,
+    pub default_line_shader: LineShader,
+}
+
+pub struct LineShader {
+    shader: Shader,
     u_mvp: UniformMat4,
     u_width: UniformFloat,
 }
 
+impl From<Shader> for LineShader {
+    fn from(shader: Shader) -> Self {
+        unsafe {
+            let u_mvp = shader.uniform("mvp");
+            let u_width = shader.uniform("width");
+
+            LineShader {
+                shader,
+                u_mvp,
+                u_width
+            }
+        }
+    }
+}
+
 pub struct LineElement {
     vao: Vao<2>,
-    vbo: Vbo,
+    pos_vbo: Vbo,
+    uv_vbo: Vbo,
     ibo: Ibo,
     n_segments: u32,
     width: f32,
@@ -71,7 +91,7 @@ impl LineElement {
         &self,
         renderer: &LineRenderer,
         transform: &Transform,
-        line_shader: &Shader,
+        line_shader: &LineShader,
     ) {
         self.vao.bind();
         self.ibo.bind();
@@ -85,10 +105,10 @@ impl LineElement {
         let proj = glm::ortho(0.0, vp_w as f32, 0.0, vp_h as f32, 0.0, 100.0);
         let model = glm::translation(&glm::vec3(x.floor(), y.floor(), 0.0));
 
-        line_shader.bind();
+        line_shader.shader.bind();
 
-        renderer.u_mvp.data(&(proj * model));
-        renderer.u_width.data(self.width);
+        renderer.default_line_shader.u_mvp.data(&(proj * model));
+        renderer.default_line_shader.u_width.data(self.width);
 
         gl::DrawElements(
             gl::TRIANGLES,
@@ -102,46 +122,58 @@ impl LineElement {
         Self::new([Segment { p1: from, p2: to }].iter(), width)
     }
 
-    pub unsafe fn new<'a, S>(segments: S, width: f32) -> Self
+    pub unsafe fn update_line(&mut self, from: Vec2, to: Vec2, width: f32) {
+        self.update([Segment { p1: from, p2: to }].iter(), width);
+    }
+
+    pub unsafe fn update<'a, S>(&mut self, segments: S, width: f32)
     where
         S: Iterator<Item = &'a Segment>,
     {
         let (vs, uvs, idx) = tesselate(segments, width);
+        self.pos_vbo.data(&vs);
+        self.uv_vbo.data(&uvs);
+        self.ibo.data(&idx);
+        self.n_segments = vs.len() as u32 / 2 - 1;
+    }
 
+    pub unsafe fn new<'a, S>(segments: S, width: f32) -> Self
+    where
+        S: Iterator<Item = &'a Segment>,
+    {
         let vao = Vao::gen();
         vao.enable_attrib_arrays();
 
-        let vbo = Vbo::gen();
-        vbo.data(&vs);
+        let pos_vbo = Vbo::gen();
+        pos_vbo.bind();
         vao.attrib_ptr(0, 2, gl::FLOAT);
 
-        let vbo = Vbo::gen();
-        vbo.data(&uvs);
+        let uv_vbo = Vbo::gen();
+        uv_vbo.bind();
         vao.attrib_ptr(1, 2, gl::FLOAT);
 
         let ibo = Ibo::gen();
-        ibo.data(&idx);
 
-        LineElement {
+        let mut li = LineElement {
             vao,
-            vbo,
+            pos_vbo,
+            uv_vbo,
             ibo,
-            n_segments: vs.len() as u32 / 2 - 1,
+            n_segments: 0,
             width,
-        }
+        };
+
+        li.update(segments, width);
+
+        li
     }
 }
 
 impl LineRenderer {
     pub unsafe fn new() -> Self {
         let shader = Shader::line();
-        let u_mvp = shader.uniform("mvp");
-        let u_width = shader.uniform("width");
-
         LineRenderer {
-            line_shader: shader,
-            u_mvp,
-            u_width,
+            default_line_shader: shader.into(),
         }
     }
 }

@@ -53,15 +53,20 @@ a possible optimization.
     - ✅ circle arcs
     - ✅ lines
     - ✅ linear splines
-9. tesselating parametric curves
+9. ✅tesselating parametric curves
 10. window size independence / positioning relative to center etc.
 11. progressively refined tesselation
+12. tesselation with compute shader
 
 ## immediate to-do list:
 - profiling, tracing and logging
-- better input handling and entity updates
-- ECS into library
-- Bézier curve tesselation
+- ECS into library?
+- separate "position objects" from rendering
+- split transform into a Vec2 translation and f32 scale
+    - remove Transform struct completely
+- custom circle shader
+- custom shader API
+- parallel tesselation of curves
 
 ## future work
 - restructure rasterization of typeset expressions to mask the whole expression in one go and then rasterize

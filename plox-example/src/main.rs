@@ -5,19 +5,18 @@ use glm::vec2;
 use plox::atlas::Atlas;
 use plox::font;
 use plox::gpu::{
-    circle::{CircleElement, CircleRenderer},
+    circle::{CircleElement, CircleRenderer, CircleShader},
     shader::Shader,
     text::{TextElement, TextRenderer, TextShader},
     typeset::Typeset,
     Transform,
 };
-use plox::line::{LineElement, LineRenderer, Segment};
+use plox::line::{LineElement, LineRenderer, LineShader, Segment};
 use plox::spline::Cubic;
 
 use glutin::event::{ElementState::*, Event, KeyboardInput, VirtualKeyCode::*, WindowEvent};
 use glutin::event_loop::ControlFlow;
 
-use std::f32::consts::PI;
 use std::ptr;
 use std::sync::{Arc, RwLock};
 
@@ -50,13 +49,34 @@ struct Thing {
     typeset_text_component: Option<Typeset>,
     text_shader_component: Option<TextShader>,
     transform_component: Option<Transform>,
-    animation_component: Option<Arc<dyn Fn(&mut Thing)>>,
+    animation_component: Option<Arc<dyn Fn(&mut Thing, &Ecs)>>,
     circle_component: Option<CircleElement>,
+    circle_shader_component: Option<CircleShader>,
+    bezier_component: Option<Cubic>,
     line_component: Option<LineElement>,
+    line_shader_component: Option<LineShader>,
 }
 
 struct Ecs {
     content: Vec<Thing>,
+}
+
+impl Ecs {
+    fn push(&mut self, e: Thing) -> usize {
+        let id = self.content.len();
+        self.content.push(e);
+        id
+    }
+
+    fn pos_of(&self, id: usize) -> glm::Vec2 {
+        self.content[id]
+            .transform_component
+            .as_ref()
+            // Replace with zero translation if component not present.
+            .map_or(vec2(0.0, 0.0), |trans| {
+                vec2(trans.translation.0, trans.translation.1)
+            })
+    }
 }
 
 impl Thing {
@@ -68,7 +88,10 @@ impl Thing {
             transform_component: None,
             animation_component: None,
             circle_component: None,
+            circle_shader_component: None,
             line_component: None,
+            line_shader_component: None,
+            bezier_component: None,
         }
     }
 
@@ -90,12 +113,22 @@ impl Thing {
         self
     }
 
+    fn line_shader(mut self, shader: LineShader) -> Self {
+        self.line_shader_component = Some(shader);
+        self
+    }
+
+    fn circle_shader(mut self, shader: CircleShader) -> Self {
+        self.circle_shader_component = Some(shader);
+        self
+    }
+
     fn transform(mut self, transform: Transform) -> Self {
         self.transform_component = Some(transform);
         self
     }
 
-    fn animation(mut self, anim: impl 'static + Fn(&mut Thing)) -> Self {
+    fn animation(mut self, anim: impl 'static + Fn(&mut Thing, &Ecs)) -> Self {
         self.animation_component = Some(Arc::new(anim));
         self
     }
@@ -107,6 +140,11 @@ impl Thing {
 
     fn line(mut self, line: LineElement) -> Self {
         self.line_component = Some(line);
+        self
+    }
+
+    fn bezier(mut self, bezier: Cubic) -> Self {
+        self.bezier_component = Some(bezier);
         self
     }
 
@@ -124,24 +162,66 @@ impl Thing {
         })
     }
 
-    fn circle_component(&self) -> Option<(&CircleElement, Option<&Transform>)> {
-        self.circle_component
-            .as_ref()
-            .map(|circ| (circ, self.transform_component.as_ref()))
+    fn circle_component(
+        &self,
+    ) -> Option<(&CircleElement, Option<&Transform>, Option<&CircleShader>)> {
+        self.circle_component.as_ref().map(|circ| {
+            (
+                circ,
+                self.transform_component.as_ref(),
+                self.circle_shader_component.as_ref(),
+            )
+        })
     }
 
-    fn line_component(&self) -> Option<(&LineElement, Option<&Transform>)> {
-        self.line_component
-            .as_ref()
-            .map(|line| (line, self.transform_component.as_ref()))
+    fn line_component(&self) -> Option<(&LineElement, Option<&Transform>, Option<&LineShader>)> {
+        self.line_component.as_ref().map(|line| {
+            (
+                line,
+                self.transform_component.as_ref(),
+                self.line_shader_component.as_ref(),
+            )
+        })
     }
 
-    fn animation_component(&mut self) -> Option<(Arc<dyn Fn(&mut Thing)>, &mut Thing)> {
+    fn bezier_component(&mut self) -> Option<(&Cubic, &mut Option<LineElement>)> {
+        self.bezier_component
+            .as_ref()
+            .map(|bez| (bez, &mut self.line_component))
+    }
+
+    fn animation_component(&self) -> Option<(Arc<dyn Fn(&mut Thing, &Ecs)>, &mut Thing)> {
+        // This gives the animation component the ability to even replace the
+        // entities animation component. it is incredibly bad, but a lot easier
+        // to implement, and a lot more flexible, than safe alternatives.
+        let danger = unsafe {
+            let im = self as *const Thing;
+            let sorry = im as *mut Thing;
+            &mut *sorry
+        };
+
         if let Some(anim) = &self.animation_component {
-            return Some((anim.clone(), self));
+            return Some((anim.clone(), danger));
         }
 
         None
+    }
+}
+
+/// Re-tesselation system.
+unsafe fn retesselate(state: &mut State) {
+    for (bez, tess) in state
+        .ecs
+        .content
+        .iter_mut()
+        .filter_map(Thing::bezier_component)
+    {
+        let spline = Segment::spline(&bez.sample());
+        if let Some(tess) = tess {
+            tess.update(spline.segments(), 2.0);
+        } else {
+            tess.replace(LineElement::new(spline.segments(), 2.0));
+        };
     }
 }
 
@@ -150,10 +230,10 @@ fn animate(state: &mut State) {
     for (anim, thing) in state
         .ecs
         .content
-        .iter_mut()
+        .iter()
         .filter_map(Thing::animation_component)
     {
-        anim(thing);
+        anim(thing, &state.ecs);
     }
 }
 
@@ -165,6 +245,9 @@ unsafe fn render(state: &State) {
     // A default transform to substitute if a renderable lacks a transform.
     let id = Transform::identity();
 
+    // There are a wide variety of "renderable" components, including
+    // text, textured quads, circles, lines, Bézier curves, etc.
+
     for thing in &state.ecs.content {
         if let Some((renderable, maybe_transform, maybe_shader)) = thing.typeset_text_component() {
             // Substitute default text shader in the absence of a specific one.
@@ -173,18 +256,18 @@ unsafe fn render(state: &State) {
             renderable.traverse_scenegraph(&state.text_renderer, text_transform, text_shader);
         }
 
-        if let Some((circle, maybe_transform)) = thing.circle_component() {
+        if let Some((circle, maybe_transform, maybe_shader)) = thing.circle_component() {
             let circle_transform = maybe_transform.unwrap_or(&id);
-            circle.rasterize(&state.circle_renderer, circle_transform);
+            let circle_shader =
+                maybe_shader.unwrap_or(&state.circle_renderer.default_circle_shader);
+            circle.rasterize(&state.circle_renderer, circle_transform, circle_shader);
         }
 
-        if let Some((line, maybe_transform)) = thing.line_component() {
+        if let Some((line, maybe_transform, maybe_shader)) = thing.line_component() {
             let line_transform = maybe_transform.unwrap_or(&id);
-            line.rasterize(
-                &state.line_renderer,
-                line_transform,
-                &state.line_renderer.line_shader,
-            );
+            let shader = maybe_shader.unwrap_or(&state.line_renderer.default_line_shader);
+
+            line.rasterize(&state.line_renderer, line_transform, shader);
         }
     }
 }
@@ -200,36 +283,20 @@ impl<'a> State<'a> {
 
         let atlas = Atlas::new(&font::LM_MATH);
         let default_text_shader = Shader::simple_blit();
-        let colored_text = Shader::fancy_blit();
 
         // Shared mouse position
         let mouse = Arc::new(RwLock::new((0.0, 0.0)));
 
-        // Typeset a test integral
-        let lim1 = Typeset::text("Ω", &atlas);
-        let sum = Typeset::integral(Some(lim1), None, &atlas);
-        let body = Typeset::text("\u{1D453}(\u{1D465})d\u{1D707}(\u{1D465})", &atlas);
-
         // Give it translation defined by mouse position.
         let m = mouse.clone();
 
-        let int = Typeset::seq(vec![sum, body]);
-
-        let mut content = Vec::with_capacity(32);
-
-        content.push(
-            Thing::new()
-                .typeset_text(int)
-                .text_shader(colored_text.into())
-                .transform(Transform {
-                    scale: 120.0,
-                    translation: (100.0, 200.0),
-                }),
-        );
+        let mut ecs = Ecs {
+            content: Vec::new(),
+        };
 
         let fps = Arc::new(RwLock::new(TextElement::new(" ", &atlas)));
 
-        content.push(
+        ecs.push(
             Thing::new()
                 .typeset_text(Typeset::elem(fps.clone()))
                 .transform(Transform {
@@ -238,48 +305,138 @@ impl<'a> State<'a> {
                 }),
         );
 
-        content.push(
-            Thing::new()
-                .circle(CircleElement::new(200.0).width(3.0).arc(0.3, 5.0))
-                .transform(Transform {
-                    scale: 1.0,
-                    translation: (400.0, 400.0),
-                })
-                .animation(move |thing| {
-                    thing.transform_component.replace(Transform {
-                        scale: f32::max(50.0, 2.0 * m.read().unwrap().1 - 400.0),
-                        translation: *m.read().unwrap(),
-                    });
-                }),
-        );
-
+        // The initial position of the Bézier (to provide some defaults).
         let bezier = Cubic::pts(
-            vec2(0.0, 0.0),
-            vec2(200.0, -50.0),
+            vec2(200.0, 200.0),
+            vec2(300.0, 150.0),
             vec2(470.0, 250.0),
             vec2(500.0, 150.0),
         );
 
-        let cl1 = LineElement::line(bezier.p0, bezier.p1, 2.0);
-        let cl2 = LineElement::line(bezier.p2, bezier.p3, 2.0);
+        //
+        // Control points.
+        //
+
+        let p1 = ecs.push(Thing::new().transform(Transform {
+            scale: 1.0,
+            translation: (bezier.p0.x, bezier.p0.y),
+        }));
+
+        let p2 = ecs.push(Thing::new().transform(Transform {
+            scale: 1.0,
+            translation: (bezier.p1.x, bezier.p1.y),
+        }));
+
+        let p3 = ecs.push(Thing::new().animation(move |thing, _| {
+            thing.transform_component.replace(Transform {
+                scale: 1.0,
+                translation: *m.read().unwrap(),
+            });
+        }));
+
+        let p4 = ecs.push(Thing::new().transform(Transform {
+            scale: 1.0,
+            translation: (bezier.p3.x, bezier.p3.y),
+        }));
+
+        //
+        // Line between control points.
+        //
+
+        ecs.push(
+            Thing::new()
+                .line(LineElement::line(bezier.p0, bezier.p1, 2.0))
+                .animation(move |thing, ecs| {
+                    if let Some(com) = &mut thing.line_component {
+                        com.update_line(ecs.pos_of(p1), ecs.pos_of(p2), 2.0);
+                    }
+                }),
+        );
+
+        ecs.push(
+            Thing::new()
+                .line(LineElement::line(bezier.p2, bezier.p3, 2.0))
+                .animation(move |thing, ecs| {
+                    if let Some(com) = &mut thing.line_component {
+                        com.update_line(ecs.pos_of(p3), ecs.pos_of(p4), 2.0);
+                    }
+                }),
+        );
+
+        //
+        // The actual Bézier
+        //
 
         let spline = Segment::spline(&bezier.sample());
         let line = LineElement::new(spline.segments(), 2.0);
 
-        content.push(Thing::new().line(cl1).transform(Transform {
-            scale: 1.0,
-            translation: (200.0, 600.0),
-        }));
+        ecs.push(
+            Thing::new()
+                .bezier(bezier)
+                .line(line)
+                .line_shader(Shader::fancy_line().into())
+                .animation(move |thing, ecs| {
+                    thing.bezier_component.replace(Cubic {
+                        p0: ecs.pos_of(p1),
+                        p1: ecs.pos_of(p2),
+                        p2: ecs.pos_of(p3),
+                        p3: ecs.pos_of(p4),
+                    });
+                }),
+        );
 
-        content.push(Thing::new().line(cl2).transform(Transform {
-            scale: 1.0,
-            translation: (200.0, 600.0),
-        }));
+        //
+        // Displayed control points.
+        //
 
-        content.push(Thing::new().line(line).transform(Transform {
-            scale: 1.0,
-            translation: (200.0, 600.0),
-        }));
+        ecs.push(
+            Thing::new()
+                .circle(CircleElement::new(5.0).width(2.0))
+                .animation(move |thing, ecs| {
+                    let p = ecs.pos_of(p1);
+                    thing.transform_component.replace(Transform {
+                        scale: 1.0,
+                        translation: (p.x, p.y),
+                    });
+                }),
+        );
+
+        ecs.push(
+            Thing::new()
+                .circle(CircleElement::new(5.0).width(2.0))
+                .animation(move |thing, ecs| {
+                    let p = ecs.pos_of(p2);
+                    thing.transform_component.replace(Transform {
+                        scale: 1.0,
+                        translation: (p.x, p.y),
+                    });
+                }),
+        );
+
+        ecs.push(
+            Thing::new()
+                .circle(CircleElement::new(5.0).width(2.0))
+                .animation(move |thing, ecs| {
+                    let p = ecs.pos_of(p4);
+                    thing.transform_component.replace(Transform {
+                        scale: 1.0,
+                        translation: (p.x, p.y),
+                    });
+                }),
+        );
+
+        ecs.push(
+            Thing::new()
+                .circle(CircleElement::new(20.0).width(3.0))
+                .animation(move |thing, ecs| {
+                    let p = ecs.pos_of(p3);
+                    thing.transform_component.replace(Transform {
+                        scale: 1.0,
+                        translation: (p.x, p.y),
+                    });
+                })
+                .circle_shader(Shader::fancy_circle().into()),
+        );
 
         State {
             win_dims: (SCREEN_W, SCREEN_H),
@@ -290,7 +447,7 @@ impl<'a> State<'a> {
             default_text_shader: default_text_shader.into(),
             circle_renderer,
             line_renderer,
-            ecs: Ecs { content },
+            ecs,
         }
     }
 }
@@ -381,9 +538,10 @@ fn main() {
             //  2. We explicitly request it.
             Event::RedrawRequested(_) => {
                 // Update animations at the start of the frame.
+                let beg = std::time::Instant::now();
                 animate(&mut state);
                 unsafe {
-                    let beg = std::time::Instant::now();
+                    retesselate(&mut state);
                     render(&state);
                     let end = std::time::Instant::now();
                     state.fps.write().unwrap().update(
