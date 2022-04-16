@@ -4,6 +4,9 @@ use crate::gpu::{Transform, self, shader::*, MultisampleTexture, Vao, Vbo};
 use crate::spline::Rect;
 use std::sync::{Arc, RwLock};
 
+
+const TEX_SIZE: u32 = 4096;
+
 /// Contains everything necessary to rasterize the alpha-texture.
 /// This texture may then be sampled by a `TextShader`.
 pub struct TextRenderer {
@@ -96,8 +99,8 @@ impl TextElement {
         // the fragment shader is cheap, and the vertex processing (where the magic happens) has
         // to be done anyways. Still far from ideal, but oh well.
 
-        let tw = 4096.0;
-        let th = 4096.0;
+        let tw = TEX_SIZE as f32;
+        let th = TEX_SIZE as f32;
 
         // Projects the text element onto the texture.
         let texture_projection = glm::ortho(x0, x0 + tw, y0, y0 + th, 0.0, 100.0);
@@ -250,7 +253,7 @@ impl TextRenderer {
         //
         // Set up α-texture. (See report for what this does)
         //
-        let tex = MultisampleTexture::alpha(4096, 4096);
+        let tex = MultisampleTexture::alpha(TEX_SIZE, TEX_SIZE);
 
         let mut fbuf = 0;
         gl::GenFramebuffers(1, &mut fbuf);

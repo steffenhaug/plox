@@ -40,7 +40,8 @@ uniform!(UniformVec4);
 uniform!(UniformFloat);
 
 // Shaders programs:
-// I just include them in the binary, so the binary is portable.
+// I just include them in the binary, so it is guaranteed that the
+// project compiles for the grading.
 const TXT_FILL_FRAG: &str = include_str!("fill.frag.glsl");
 const TXT_FILL_VERT: &str = include_str!("fill.vert.glsl");
 const TXT_OUTLINE_FRAG: &str = include_str!("outline.frag.glsl");

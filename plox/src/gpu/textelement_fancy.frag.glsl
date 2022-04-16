@@ -11,7 +11,7 @@ void main() {
     int y = int(tex_dims.y * clamp(uv.y, 0, 1));
 
     float alpha = 0.0;
-    int N = 8;
+    int N = 1;
 
     for (int i = 0; i < N; i++) {
         float sample_alpha = texelFetch(tex, ivec2(x, y), i).r;

@@ -60,9 +60,6 @@ a possible optimization.
 ## immediate to-do list:
 - profiling, tracing and logging
 - ECS into library?
-- separate "position objects" from rendering
-- split transform into a Vec2 translation and f32 scale
-    - remove Transform struct completely
 - custom shader API
 
 ## future work

@@ -1,5 +1,5 @@
 use crate::gpu::shader::{Shader, UniformFloat, UniformMat4};
-use crate::gpu::{self, Ibo, Transform, Vao, Vbo};
+use crate::gpu::{self, Ibo, Vao, Vbo};
 use crate::tesselate::tesselate;
 use glm::Vec2;
 

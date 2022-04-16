@@ -256,9 +256,6 @@ unsafe fn render(state: &State) {
     gl::ClearColor(1.0, 1.0, 1.0, 1.0);
     gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
-    // A default transform to substitute if a renderable lacks a transform.
-    let id = Transform::identity();
-
     // There are a wide variety of "renderable" components, including
     // text, textured quads, circles, lines, Bézier curves, etc.
 
@@ -315,13 +312,26 @@ impl<'a> State<'a> {
             content: Vec::new(),
         };
 
+        // Frame timing display.
         let fps = Arc::new(RwLock::new(TextElement::new(" ", &atlas)));
-
         ecs.push(
             Thing::new()
                 .typeset_text(Typeset::elem(fps.clone()))
                 .translate(vec2(10.0, 10.0))
-                .scale(40.0)
+                .scale(40.0),
+        );
+
+        // Typeset a test integral.
+        let lim1 = Typeset::text("Ω", &atlas);
+        let sum = Typeset::integral(Some(lim1), None, &atlas);
+        let body = Typeset::text("\u{1D453}(\u{1D465})d\u{1D707}(\u{1D465})", &atlas);
+        let int = Typeset::seq(vec![sum, body]);
+        ecs.push(
+            Thing::new()
+                .typeset_text(int)
+                .text_shader(Shader::fancy_blit().into())
+                .translate(vec2(25.0, 700.0))
+                .scale(90.0),
         );
 
         // The initial position of the Bézier (to provide some defaults).
@@ -339,10 +349,14 @@ impl<'a> State<'a> {
         let p1 = ecs.push(Thing::new().translate(bezier.p0));
         let p2 = ecs.push(Thing::new().translate(bezier.p1));
 
-        let p3 = ecs.push(Thing::new().animation(move |thing, _| {
-            let (x, y) = *m.read().unwrap();
-            thing.translation_component.replace(vec2(x, y));
-        }));
+        let p3 = ecs.push(
+            Thing::new()
+                .translate(bezier.p2)
+                .animation(move |thing, _| {
+                    let (x, y) = *m.read().unwrap();
+                    thing.translation_component.replace(vec2(x, y));
+                }),
+        );
 
         let p4 = ecs.push(Thing::new().translate(bezier.p3));
 
