@@ -1013,3 +1013,17 @@ relation, which is notoriously _really_ annoying in Rust.
 Additionally, when refining our partition, new childen nodes will always be appended
 to the _end_ of the vector, and since each node has two children, the array will always
 double when we add a new level of refinement, a vector backed storage is ideal.
+
+## Brute force
+
+Perhaps the _simplest_ error measure is simply the length of a line segment.
+If a line segment is, say 3 pixels long, it is confined approximately to a $3 \times 3$
+pixel cell, in which it is basically not possible for it to deviate more than $\pm 1$ pixels
+from the correct line.
+Of course, this will lead to a lot of wasted tesselation in the "straight" parts of a curve,
+but simplicity is often a performance win since complex "optimal" solutions often lose out
+because of overhead and constant factors on small problem sizes, and if we can get away
+with only breaking a curve into a few hundred segments, this is likely to be the case,
+and so there is no point going all out prematurely before we know that the brutal approach
+is too slow, and before we have a running demo to profile for improvements.
+

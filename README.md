@@ -55,7 +55,6 @@ a possible optimization.
     - ✅ linear splines
 9. ✅tesselating parametric curves
 10. window size independence / positioning relative to center etc.
-11. progressively refined tesselation
 12. tesselation with compute shader
 
 ## immediate to-do list:
@@ -64,9 +63,7 @@ a possible optimization.
 - separate "position objects" from rendering
 - split transform into a Vec2 translation and f32 scale
     - remove Transform struct completely
-- custom circle shader
 - custom shader API
-- parallel tesselation of curves
 
 ## future work
 - restructure rasterization of typeset expressions to mask the whole expression in one go and then rasterize
@@ -75,6 +72,7 @@ a possible optimization.
 - run Lua/Fennel in a separate thread with an event loop proxy
 - better gl abstraction or use vulkan
 - replace the arc<rwlock> mess (crossbeam atomic cells maybe)
+- parallel tesselation of curves (compute shader?)
 
 ## simplifying assumptions:
 - use latex font (include in repo, ttf only, hardcoded path, cant go wrong) legal to redistribute

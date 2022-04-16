@@ -1,4 +1,4 @@
-use crate::gpu::{self, shader::*, Transform, Vao};
+use crate::gpu::{self, shader::*, Vao};
 
 pub struct CircleRenderer {
     phantom_vao: Vao<0>,
@@ -64,14 +64,11 @@ impl CircleElement {
     pub unsafe fn rasterize(
         &self,
         renderer: &CircleRenderer,
-        transform: &Transform,
+        trans: glm::Vec2,
         circle_shader: &CircleShader,
     ) {
         // Compute the circles transform.
-        let Transform {
-            translation: (x, y),
-            ..
-        } = *transform;
+        let (x, y) = (trans.x, trans.y);
         let (.., vp_w, vp_h) = gpu::gl_viewport();
         let window_projection = glm::ortho(0.0, vp_w as f32, 0.0, vp_h as f32, 0.0, 100.0);
         let model_matrix = glm::translation(&glm::vec3(x.floor(), y.floor(), 0.0));

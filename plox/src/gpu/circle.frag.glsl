@@ -22,13 +22,6 @@ void main() {
     // Polar cordinates (|r|, φ)
     vec2 r = (width + radius) * (2.0 * uv - 1.0);
 
-    // Draw the fill!
-    if (length(r) < radius) {
-        color = fill_color;
-    } else {
-        color = vec4(0,0,0,0);
-    }
-
     // Map [-π, π] -> [0, 2π]
     float phi = mod((atan(r.y, r.x) + 2*PI), 2*PI);
 
@@ -45,6 +38,7 @@ void main() {
     
     // Draw the circle arc.
     vec4 o_color = vec4(outline_color.rgb, alpha*beta*outline_color.a);
+    vec4 f_color = length(r) < radius ? fill_color : vec4(0,0,0,0);
 
-    color = blend(color, o_color);
+    color = blend(f_color, o_color);
 }
