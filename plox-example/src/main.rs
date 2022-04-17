@@ -495,7 +495,6 @@ fn main() {
     // OpenGL Initializerion.
     //
     unsafe {
-        gl::Disable(gl::MULTISAMPLE);
         gl::Enable(gl::BLEND);
         gl::BlendFuncSeparate(
             gl::SRC_ALPHA,

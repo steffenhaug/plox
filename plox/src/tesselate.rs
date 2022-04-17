@@ -77,6 +77,7 @@ where
                 let th = v.angle(&u);
                 let phi = (PI - th) / 2.0;
                 // Calculate the consequtent v-delta.
+                // Note, this has problems: tan(x) explodes
                 let dv = width * f32::tan(PI / 2.0 - phi);
                 // Note that which "side" to add and take away from depends
                 // on which way the line is curving (obviously). The sign of

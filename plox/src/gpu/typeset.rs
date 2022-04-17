@@ -4,7 +4,7 @@
 //! assign its place in the scene graph so it gets rendered with the correct transform.
 use self::Node::*;
 use crate::atlas::Atlas;
-use crate::gpu::text::{SharedText, TextElement, TextShader, TextRenderer};
+use crate::gpu::text::{SharedText, TextElement, TextRenderer, TextShader};
 use crate::gpu::Transform;
 use crate::spline::Rect;
 use std::sync::{Arc, RwLock};
@@ -67,7 +67,7 @@ impl Typeset {
         Typeset {
             content: Node::Text(arc),
             bbox,
-            transform: Box::new(|| Transform::identity())
+            transform: Box::new(|| Transform::identity()),
         }
     }
 
@@ -146,7 +146,7 @@ impl Typeset {
         &self,
         renderer: &TextRenderer,
         transform_so_far: &Transform,
-        text_shader: &TextShader
+        text_shader: &TextShader,
     ) {
         let transform = transform_so_far.compose(&(self.transform)());
         match &self.content {

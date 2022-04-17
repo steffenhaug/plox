@@ -15,9 +15,9 @@
 //!
 //! The abstraction provided is limited: All it provides is newtypes for IDs and methods that
 //! supply some default parameters to avoid misuse.
+pub mod circle; // circle, circle arc rendering
 pub mod shader;
 pub mod text; // text rendering
-pub mod circle; // circle, circle arc rendering
 pub mod typeset;
 
 use gl::types::*;
@@ -54,7 +54,7 @@ pub struct Ssbo {
     buffer: GLuint,
 }
 
-pub struct MultisampleTexture {
+pub struct Texture {
     pub tex: GLuint,
 }
 
@@ -208,39 +208,40 @@ impl Ssbo {
     }
 }
 
-impl MultisampleTexture {
+impl Texture {
     #[inline(always)]
     pub unsafe fn bind(&self) {
-        gl::BindTexture(gl::TEXTURE_2D_MULTISAMPLE, self.tex);
+        gl::BindTexture(gl::TEXTURE_2D, self.tex);
     }
 
     /// Create a single-channel multisampled texture. Used as alpha-channel
     /// for anti-aliased text.
     #[inline(always)]
-    pub unsafe fn alpha(width: u32, height: u32) -> MultisampleTexture {
+    pub unsafe fn alpha(width: u32, height: u32) -> Texture {
         let mut tex = 0;
         gl::GenTextures(1, &mut tex);
-        gl::BindTexture(gl::TEXTURE_2D_MULTISAMPLE, tex);
+        gl::BindTexture(gl::TEXTURE_2D, tex);
 
-        gl::TexImage2DMultisample(
-            gl::TEXTURE_2D_MULTISAMPLE,
-            // 16x hard-coded for now. Could tweak this at type level.
-            1,
-            // A single color channel.
-            gl::R8,
-            // Negative dims is actually error, so casting a u32
-            // is better than exposing the real type.
+        gl::TexImage2D(
+            gl::TEXTURE_2D,
+            0,             /* Level of detail */
+            gl::R8 as i32, /* Internal format (A single color channel) */
             width as i32,
             height as i32,
-            // Use fixed sample locations.
-            gl::TRUE,
+            0,                 /* Border. (Must be zero per the docs) */
+            gl::RED,           /* Format for pixel data. */
+            gl::UNSIGNED_BYTE, /* Type of pixel data. */
+            std::ptr::null(),
         );
 
-        gl::BindTexture(gl::TEXTURE_2D_MULTISAMPLE, 0);
-        MultisampleTexture { tex }
+        // Disable mipmapping
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
+
+        gl::BindTexture(gl::TEXTURE_2D, 0);
+        Texture { tex }
     }
 }
-
 
 // Really, this could just be a glm::mat4
 #[derive(Debug)]

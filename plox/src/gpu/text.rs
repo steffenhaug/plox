@@ -1,17 +1,16 @@
 //! # Text Renderer implementation.
 use crate::atlas::{Atlas, Outline};
-use crate::gpu::{Transform, self, shader::*, MultisampleTexture, Vao, Vbo};
+use crate::gpu::{Transform, self, shader::*, Texture, Vao, Vbo};
 use crate::spline::Rect;
 use std::sync::{Arc, RwLock};
 
-
-const TEX_SIZE: u32 = 4096;
+const TEX_SIZE: u32 = 4*4096;
 
 /// Contains everything necessary to rasterize the alpha-texture.
 /// This texture may then be sampled by a `TextShader`.
 pub struct TextRenderer {
     // α-texture
-    tex: MultisampleTexture,
+    tex: Texture,
     fbuf: u32,
     // Shaders to draw the fill and outline of the α-texture.
     fill: Shader,
@@ -103,8 +102,8 @@ impl TextElement {
         let th = TEX_SIZE as f32;
 
         // Projects the text element onto the texture.
-        let texture_projection = glm::ortho(x0, x0 + tw, y0, y0 + th, 0.0, 100.0);
-        let texture_scale = glm::scaling(&glm::vec3(scale, scale, 0.0));
+        let texture_projection = glm::ortho(4.0*x0, 4.0*x0 + tw, 4.0*y0, 4.0*y0 + th, 0.0, 100.0);
+        let texture_scale = glm::scaling(&glm::vec3(4.0*scale, 4.0*scale, 0.0));
         let texture_mvp = texture_projection * texture_scale;
 
         //
@@ -253,19 +252,20 @@ impl TextRenderer {
         //
         // Set up α-texture. (See report for what this does)
         //
-        let tex = MultisampleTexture::alpha(TEX_SIZE, TEX_SIZE);
+        let tex = Texture::alpha(TEX_SIZE, TEX_SIZE);
 
         let mut fbuf = 0;
         gl::GenFramebuffers(1, &mut fbuf);
         gl::BindFramebuffer(gl::FRAMEBUFFER, fbuf);
 
-        gl::FramebufferTexture2D(
+        gl::FramebufferTexture(
             gl::FRAMEBUFFER,
             gl::COLOR_ATTACHMENT0,
-            gl::TEXTURE_2D_MULTISAMPLE,
             tex.tex,
             0,
         );
+
+        gl::DrawBuffers(1, &[gl::COLOR_ATTACHMENT0] as *const u32);
 
         if gl::CheckFramebufferStatus(gl::FRAMEBUFFER) != gl::FRAMEBUFFER_COMPLETE {
             panic!("α-texture framebuffer incomplete");
