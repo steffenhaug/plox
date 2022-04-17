@@ -293,16 +293,17 @@ By enabling `gl::COLOR_LOGIC_OP`, with the operator `gl::XOR`, we can rasterize 
 of a glyph by just drawing triangles.
 This saves us a lot of "fuckery" (I believe this is the technical term) with the OpenGL state.
 
-\begin{figure}[h]
+\begin{figure*}
 \begin{center}
-\includegraphics[height=0.2\columnwidth]{report/xor_fill.png}
-\includegraphics[height=0.2\columnwidth]{report/blinn_regions.png}
-\includegraphics[height=0.2\columnwidth]{report/xor_outline.png}
+\includegraphics[height=0.2\textwidth]{report/xor_fill.png}
+\includegraphics[height=0.2\textwidth]{report/blinn_regions.png}
+\includegraphics[height=0.2\textwidth]{report/xor_outline.png}
 \end{center}
 \caption{The process of applying the outline to a filled glyph.}
-\end{figure}
+\label{fig:outline}
+\end{figure*}
 
-As we can see this works great, but we are not done.
+As we can see in Figure \ref{fig:outline}, this works great, but we are not done.
 What remains is filling the area between the outline and the filled glyph.
 To do this, we can use a simple method outlined by
 [Loop and Blinn in 2005](https://www.microsoft.com/en-us/research/wp-content/uploads/2005/01/p1000-loop.pdf).
@@ -324,27 +325,121 @@ In other words, it is just one more XOR.
 Okay that works great! But there are two minor awkward issues remaining,
 both of which thankfully has the same simple solution.
 
-\begin{figure}[h]
-\begin{center}
-\end{center}
-\caption{The regions between the outline of the glyph and the interior as
-rasterized by the fill algorithm.}
-\end{figure}
+The XOR color logic applies bitwise to the colors present in the framebuffer.
+This means it works perfectly well when we are starting with a buffer of all zeros,
+and drawing all ones, in other words white on black.
+However, if we draw with different colors, the resulting glyph will be shaded with
+the bitwise difference between the source color and the destination color.
+That's a bit odd.
 
+We have also still not accounted for the need for anti-aliased text.
+Wallace accomplishes this by drawing the same text multiple times, slightly offset,
+and accumulating 6xMSAA samples in other color channels. Again, this is very clever,
+but doing multiple draw calls (for example 16x) with the text means the vertices 
+that are not on screen has to be discarded over and over and over (16 times).
+This is clearly a big waste.
+
+My solution is to rasterize the text to a separate texture first.
+In theory we can use a multisampled texture, but support for and implementation of
+these (as i discovered the hard way) vary wildly across platforms, so we won't get 
+consistent results.
+A more robust approach is to use a normal texture, and rasterize at 16x resolution
+and sample a $4 \times 4$ area of 16 texels in the fragment shader.
+Taking the roundabout via a separate texture with only one color channel allows us
+to clear it to $\alpha = 0$ before we start, and rasterize with $\alpha = 1$,
+and then essentially blit this texture to the on-screen framebuffer, thus also
+fixing the XOR-related color madness.
+Using such a large texture might be prone to hardware limitation on older hardware,
+but the integrated graphics on my Ryzen processor allows me to allocate and use a
+$16\mathrm K \times 16\mathrm K$ texture without any fuss or apparent performance problems,
+so I will not worry about it prematurely.
+
+\begin{table}[h]
+\begin{center}
+\begin{tabular}{ccc}
+\hline
+\hline
+\scshape 1 Sample & \scshape 4x MS & \scshape 16x MS \\
+\hline
+\includegraphics[width=.25\columnwidth]{report/aa_test/big_1.png} & 
+\includegraphics[width=.25\columnwidth]{report/aa_test/big_4.png} & 
+\includegraphics[width=.25\columnwidth]{report/aa_test/big_16.png} \\
+
+\includegraphics[width=.25\columnwidth]{report/aa_test/medium_1.png} & 
+\includegraphics[width=.25\columnwidth]{report/aa_test/medium_4.png} & 
+\includegraphics[width=.25\columnwidth]{report/aa_test/medium_16.png} \\
+
+\includegraphics[width=.25\columnwidth]{report/aa_test/tiny_1.png} & 
+\includegraphics[width=.25\columnwidth]{report/aa_test/tiny_4.png} & 
+\includegraphics[width=.25\columnwidth]{report/aa_test/tiny_16.png} \\
+\hline
+\end{tabular}
+\end{center}
+\caption{Various levels of anti-aliasing, for various font-sizes.}
+\label{tab:msaa}
+\end{table}
+
+The algorithm provides pretty good-looking anti-aliased glyphs.
+We are effectively doing the exact same computation as an algorithm
+based on winding-numbers in the fragment shader would do;
+we should have the exact same winding numbers for the corresponding samples.
+We are just skipping a lot of polynomial-solving to get there.
+Table \ref{tab:msaa} shows a breakdown of sample numbers and font sizes.
+
+This algorithm has one big advantage over Lengyels algorithm:
+The fragment shader is insanely cheap; it literally just sets the output to 1.
+Thus, this method scales better as font sizes increase, which is a good characteristic
+in the context of animations and interactive visualizations.
+The cost of this is that we are sending _a lot_ more vertices.
+When rendering a large volume of text naïvely, almost all the GPUs juice is spent
+processing vertices just to discard them, and there is no way around this except
+for doing some simple clipping in software so we don't submit too many glyphs that will
+get clipped.
+
+All in all, for the workloads we would expect to see in presentations and mathematical
+visualizations, we generally see improved performance.
+
+And finally, this algorithm is unpatentable since it would trivially be
+invalidated by prior art. Moreover, the algorithm was initially published
+under GPL, although it was implemented in a funky language that I have never
+heard about, so my implementation is based only on Wallace's mathematical
+description, which should not even infringe on copyright,
+so I'm free to release it MIT-licensed, which means I can use it at work
+without having to open-source the companys data processing system. `:v)`
 
 ## Hinting and subixel rendering
+A final point about font rasterization quality.
+I briefly mentioned earlier that FreeType does hinting and sub-pixel rendering.
+Hinting essentially boils down to _adjusting_ the bezier curves surrounding the
+glyph to align with the pixel grid. This gives small font sizes crisper edges, but _changes the shape_ of the font.
+For this reason it is slightly controversial, between people favoring clear edges, and people favoring representing
+a rasterized glyph as the best possible approximation of what the type designer intended.
+On modern, high-resolution displays -- generally speaking -- hinting does next to nothing.
+If a character is big enough to be legible, even thin bits will contain several sample points, and thus aligning
+the curves to the sample points is pointless. I will not attempt to implement hinting.
 
+\begin{figure}[h]
+\begin{center}
+\includegraphics[width=0.625\columnwidth]{report/aa_test/evince_tiny.png}
+\end{center}
+\caption{Hinted font rasterization in Evince, a popular PDF reader.}
+\label{fig:evince}
+\end{figure}
 
+For the record, Figure \ref{fig:evince} shows how the same text as in Table \ref{tab:msaa},
+with a similar small font size, renders in Evince,
+a pretty standard PDF-reader that presumably uses FreeType. As you can see, there is probably
+some hinting going on, as the top of the $\nabla$ is quite sharp, and the bottom of the
+$\alpha$ is oddly straight. This is because it has been "massaged" into the pixel grid,
+thus deforming the glyph in favor of sharpness.
+Do note how much more closely the non-hinted version of $\alpha$ resembles the original design of the glyph!
+All in all, I don't think I'm doing so bad in comparison to FreeType.
 
-
-- delibarately no hinting
-- two good solution:
-    - winding number in fragment shader
-        - few verts. good for lots of text
-    - wining nunmber by modular arithmetic on color
-        - a fuckton of verts, good for large text
-        - good for text that varies a lot in zoom
-
+Subpixel rendering would be a nice goal, but since it relies on basically exploiting the physical layout of
+a pixel on the screen, and _coloring_ a pixel to light up a speficif fraction of it, this introduces assumptions
+about the users monitor. Personally, I have one monitor which is rotated vertically, and one which is not,
+so subpixel rendering _just doesnt work_. If i moved a window between monitors, the text would look horrible.
+Furthermore, this is just not necessary on modern high resolution displays.
 
 # Typesetting
 - horizontal and vertical stacking
