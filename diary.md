@@ -789,7 +789,8 @@ disproportionally large strokes like this.
 After a statistical survey with sample size $N=2$ (my girlfriend, and my friend in Switzerland) 
 I conclude that everyone only likes them long, so we need to do something.
 
-These "large" symbols are actually implemented in a pretty annoying way: They are composed of
+These "large" symbols are actually implemented in a pretty annoying way:
+They are composed of
 different glyphs in the underlying font, with separate code points.
 For example, the integral symbol consists of unicode `0x2320` and `0x2321`.
 But we never want to treat these glpyhs as separate symbols. Trying to hack this together in the

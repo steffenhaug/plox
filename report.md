@@ -442,17 +442,210 @@ so subpixel rendering _just doesnt work_. If i moved a window between monitors, 
 Furthermore, this is just not necessary on modern high resolution displays.
 
 # Typesetting
-- horizontal and vertical stacking
-- composing symbols made up of separate characters
-- deliberately woefully inadequate
-- not worth spending time on. want to use a proper tex parser.
+The typesetting included in the library is mostly a proof of concept.
+The main idea is to construct a scene graph of text elements that
+allows us to stack text elements vertically and horizontally, and
+adjust the kerning as needed.
+
+Some symbols used in \LaTeX\ consists of multiple glyphs.
+For example, the integral symbol consists of unicode `0x2320` and `0x2321`.
+But we never want to treat these glpyhs as separate symbols. Trying to hack this together in the
+current font rendering system by using negative kerning and vertical offsets is first of all just
+begging for errors, and secondly extremely annoying. A "nicer" way would be to support some form of
+automatic merging of glyphs from the font atlas.
+
+So I implemented a way to typeset integrals that supports all this:
+\begin{figure}[h]
+\begin{center}
+\includegraphics[width=0.625\columnwidth]{report/latex_adjustments.png}
+\end{center}
+\caption{An integral with adjustments making use of the obscure symbols in higher unicode ranges.}
+\label{fig:evince}
+\end{figure}
+For reference:
+$$
+\int\displaylimits_\alpha^\beta f(z) \mathrm d \mu
+$$
+This clearly works. The integral symbol is glued together from the
+two relevant glyphs, and the integral is typeset by positioning three boxes vertically
+to put limits above and below the integral symbol, and boxes are stacked horizontally
+with kerning rules respected to place the integral boxes next to the integrand.
+
+Now, _just_ this is obviously woefully inadequate.
+But I want to leave it here, because I'm not interested in making
+a new parser for \LaTeX\ from scratch. I'm sure that some usable parser
+exists that can construct all these boxes and offsets _correctly_
+instead of me hacking it together with some random constants that look
+"close enough".
+I don't consider this worth spending time on beyond proving that using a
+scene graph works great.
+If you want to animate part of a typeset expression, for example,
+you can animate its transform in the graph, and the graph will make animations
+stack "correctly".
+
 
 # Geometrical primitives
-- Lines and linear splines
-- Béziers and parametric curves in general
-    - tesselation into linear spline
-- Circles and circle arcs
+With text working, that's the most challenging primitive out of the way.
+But by itself, it is not enough to create interesting visualizations.
+Working through all the state-of-the-art text rendering techniques posed
+enough of a challenge that i could probably leave it here. (The report is 
+certainly getting long enough!)
+For completeness I think I'd better include some geometrical
+primitives  as well.
+Thankfully this is relatively straigth-forward, since most geometrical
+primitives have easy explicit forms.
+It also lets me showcase one of my favorite fragment shading tricks
+to render anti-aliased explicit geometry:
+
+Given a quantity `R`, `dR = fwidth(R)` gives the screen-space derivative
+of `R`.
+The trick is that if we transform our explicit geometry to a form
+$\mathtt R(uv)$ where $\mathtt R$ is zero on the boundary of
+of the geometry, negative on the inside, and positive on the outside,
+then $\mathtt R \in [0, \mathtt{dR}]$ near the boundary.
+Clearly,
+$$
+\mathtt R \in [0, \mathtt{dR}]
+\iff
+\frac {\mathtt R} {\mathtt{dR}} \in [0, 1]
+$$
+So the simple quantity $\mathtt R / \mathtt{dR}$ actually defines a
+mapping from a coordinate $uv$ to a alpha-value depending on how far
+the coordinate is from the boundary of the geometry, assuming that
+$\mathtt R$ increases linearly going away from the geometry.
+
+## Circle
+For a circle of radius $r$ and width $w$, the quantity
+$$
+\mathtt R = \mathtt{abs}(|uv| - r) - w
+$$
+is such an explicit form. This defines a radial $\alpha$-mask.
+
+\begin{figure}[h]
+\begin{center}
+\includegraphics[width=0.4\columnwidth]{report/circle_with_aa.png}
+\includegraphics[width=0.4\columnwidth]{report/circle_with_aa_zoom.png}
+\caption{Anti-aliased circle overlapping some text to show that this possible edge case works.}
+\end{center}
+\end{figure}
+
+Similarly, given a fragments angle $\vartheta$ from the $\hat u$-axis,
+angles $\varphi_1, \varphi_2$, let $\psi = (\varphi_1 + \varphi_2) / 2$,
+the half-angle between $\varphi_1$ and $\varphi_2$,
+the quantity
+$$
+\mathtt A = \mathtt{abs}(\vartheta - \psi) - (\varphi_2 - \psi)
+$$
+is the same kind of explicit form, defining an angular $\alpha$-mask.
+
+\begin{figure}[h]
+\begin{center}
+\includegraphics[width=0.625\columnwidth]{report/arc_aa.png}
+\caption{Anti-aliasing in action on a circle arc from .3 to 1 radian.
+Both the radial and angular $\alpha$-mask is applied.}
+\end{center}
+\end{figure}
+
+
+## Linear splines
+Another important graphical primitive is lines and line segments.
+Graphics hardware has support for drawing these out of the box, even with anti-aliasing,
+but this feature is not _quite_ good enough.
+The anti-aliasing quality is hardware-dependant, and the line-width can not necessarily
+be arbitrary. Lastly, it is not easy to do arbitrary fragment processing on the lines.
+It is desirable to somehow tesselate the lines.
+
+The straight-forward way to do this is to tesselate a line from point $A$ to point $B$
+with width $w$ and length $L = |B - A|$ as a rectangle. The vectors
+$$
+\hat v = \frac{B - A} {L}
+\quad\text{and}\quad
+\hat w = \begin{pmatrix}
+0 & -1 \\
+1 & 0
+\end{pmatrix} \hat v
+$$
+defines an orthonormal basis in which the line is parallell to the $\hat v$-axis, eminating from 
+the origin.
+A quad 
+$$
+\{ -w \hat v \pm w \hat w, (L + w) \hat v \pm w \hat w \}
+$$
+will cover the line, but this simple approach has some big problems.
+First of all, when drawing lines that are connecting on an angle, the joint will have
+"corners sticking out".
+Secondly, if draw with transparency, the joint would have overlapping fragments where
+the color would be off. This can _not_ be fixed by depth testng, because if the
+line sequence has a self-intersection (a loop) it is _correct_ to draw twice.
+
+We need to offset the vertices at the joint based on the width $w$ and the angle
+between the lines. For line segments $A \rightarrow B \rightarrow C$,
+the angle between them, $\vartheta$, is given by the vectors
+$\vec u = B - A$ and $\vec v = C - B$:
+$$
+\vartheta = \arccos \frac {\vec u \cdot \vec v} {|\vec u| |\vec v|}
+$$
+and the angle we need to use to adjust the vertices is the half of the compliment
+of this angle
+$$
+\varphi = \frac {\pi - \vartheta} 2
+$$
+By basic trigonometry, $w = K \sin \varphi \implies K = \sfrac{w}{\sin \varphi}$.
+The offset to the vertices is then $\pm K \cos \varphi = w \cot \varphi$.
+
+![Rasterized circle arc and curve tesselated as trapezoidal line segments, demonstrating use of texture coordinates.](report/aliased_line_circle.png)
+
+As we can see, this works.
+A gradient is drawn on the tesselated $\sin$-graph to demonstrate
+the texture cordinates on the tesselated curve varying smoothly.
+
+![Finely tesselated graph of the equation $y = \sin x$, demonstrating that the texture coordinates are nicely behaved as the tesselation gets finer.](report/finely_tesselated_sinus.png)
+
+Drawing a fine tesselation shows that the texture-coordinate mapping is 
+well-behaved even approaching the limit case.
+
+![A dashed line, achieved using the lines texture coordinates to zero the alpha-channel at regular intervals.](report/dashed_line.png)
+
+One thing we can achieve using the texture coordinates, is the effect of a dashed line.
+Simply zero the alpha periodically along the axis parallell to the curve.
+There is of course no limit to the things a fragment shader can do:
+
+![A shaded curve tesselation with the Mandelbrot set visualized on top.](report/cursed_curved_mandelbrot.png)
+
+Of course this is a bit goofy, and doesn't look good at all, but it proves the point.
+
+## Tesselated parametric curves
+The techniques used to fill in the outlines of character glyhps can technically
+be used to rasterize quadratic Bézier curves with simple modifications.
+However, since the edges of the triangle are tangential to the curve in the limit case
+when $t \rightarrow 1$ and $t \rightarrow 0$, there is no real way to draw a Bézier
+curve with any form of thickness, and there is no real way to do anti-aliasing properly.
+Moreover, the technique is only simple for quadratic Bézier curves.
+It can be extended to cubics on a quad, but for anything more it would be ridiculously
+complicated.
+
+On the other hand, tesselating an arbitrary parametric curve is relatively easy.
+We just need a bunch of sample points, and we construct a linear spline of the sort
+outlined in the previous section, and we get arbitrary thickness, antialiasing and texturing
+without doing any work in that department.
+In order to guarantee no visual buggyness, we need to recursively refine the tesselation
+until the error is sufficiently small.
+There are many clever ways to estimate the error for a given tesselation,
+but perhaps the _simplest_ error measure is simply the length of a line segment.
+If a line segment is, say 3 pixels long, it is confined approximately to a $3 \times 3$
+pixel cell, in which it is basically not possible for it to deviate more than $\pm 1$ pixels
+from the correct line.
+Of course, this will lead to a lot of wasted tesselation in the "straight" parts of a curve,
+but simplicity is often a performance win since complex "optimal" solutions often lose out
+because of overhead and constant factors on small problem sizes, and if we can get away
+with only breaking a curve into a few hundred segments, this is likely to be the case,
+so there is no point going all out prematurely before we know that the brutal approach
+is too slow, and before we have a running demo to profile for improvements.
+Moreover, we only need to retesselate when the control points change, so in many applications
+the time spent retesselating will be extremely minimal.
 
 # Future work
+- 3d plotting
+- tex parser
 - wgpu, vulkan, webGL. safe gpu abstraction.
-- 
+- lua api
