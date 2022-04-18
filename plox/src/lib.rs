@@ -9,6 +9,7 @@ extern crate nalgebra_glm as glm;
 extern crate ttf_parser as ttf;
 
 pub mod spline;
+pub mod svg;
 pub mod shaping;
 pub mod font;
 pub mod atlas;

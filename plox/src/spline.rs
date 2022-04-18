@@ -245,9 +245,86 @@ impl ttf_parser::OutlineBuilder for Builder {
     }
 
     /// Insert a Bézier curve to (x, y) via the control points (x1, y1), (x2, y2).
-    fn curve_to(&mut self, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32) {
-        // No accurate cubic->quadratic approximation yet.
-        unimplemented!()
+    fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
+        let x = x * self.scale;
+        let y = y * self.scale;
+        let x1 = x1 * self.scale;
+        let y1 = y1 * self.scale;
+        let x2 = x2 * self.scale;
+        let y2 = y2 * self.scale;
+
+        self.expand_bbox(x1, y1);
+        self.expand_bbox(x2, y2);
+        self.expand_bbox(x, y);
+
+        let cubic = Cubic {
+            p0: glm::vec2(self.position.x, self.position.y),
+            p1: glm::vec2(x1, y1),
+            p2: glm::vec2(x2, y2),
+            p3: glm::vec2(x, y),
+        };
+
+        // Take some on-curve sample points.
+        let samples = [
+            cubic.r(0.0),
+            cubic.r(1.0 / 6.0),
+            cubic.r(1.0 / 3.0),
+            cubic.r(3.0 / 6.0),
+            cubic.r(2.0 / 3.0),
+            cubic.r(5.0 / 6.0),
+            cubic.r(1.0),
+        ];
+
+        // Approximate the cubic by three quadratics.
+        let q1 = Quadratic(
+            /* 0 1 2 */
+            Point {
+                x: samples[0].x,
+                y: samples[0].y,
+            },
+            Point {
+                x: 2.0 * samples[1].x - 0.5 * (samples[0].x + samples[2].x),
+                y: 2.0 * samples[1].y - 0.5 * (samples[0].y + samples[2].y),
+            },
+            Point {
+                x: samples[2].x,
+                y: samples[2].y,
+            },
+        );
+
+        let q2 = Quadratic(
+            /* 2 3 4 */
+            Point {
+                x: samples[2].x,
+                y: samples[2].y,
+            },
+            Point {
+                x: 2.0 * samples[3].x - 0.5 * (samples[2].x + samples[4].x),
+                y: 2.0 * samples[3].y - 0.5 * (samples[2].y + samples[4].y),
+            },
+            Point {
+                x: samples[4].x,
+                y: samples[4].y,
+            },
+        );
+
+        let q3 = Quadratic(
+            /* 4 5 6 */
+            Point {
+                x: samples[4].x,
+                y: samples[4].y,
+            },
+            Point {
+                x: 2.0 * samples[5].x - 0.5 * (samples[4].x + samples[6].x),
+                y: 2.0 * samples[5].y - 0.5 * (samples[4].y + samples[6].y),
+            },
+            Point {
+                x: samples[6].x,
+                y: samples[6].y,
+            },
+        );
+        self.beziers.extend([q1, q2, q3]);
+        self.position = Point { x, y };
     }
 
     fn close(&mut self) {

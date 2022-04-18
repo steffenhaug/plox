@@ -77,18 +77,19 @@ The styling of the primitives should be _very customizable_.
 Technicalities should never limit creative expression -- any desired visual
 effect should be achievable.
 
-Especially text rasterization, as an instance of rasterization of _implicit geometry_,
+Especially text rasterization, as an example of rasterization of _implicit geometry_,
 is quite complex to do efficiently on a GPU, and this system went through quite a lot 
 of iteration. This process, and other details, is outlined in depth in a separate
 document -- a diary I wrote daily as I worked on the project.
 The diary is quite unstructured, but it contains details about everything that did
 not end up making it in to the project, and details about the process of discovery.
-This report contains a brief summary of everything that _did_ make it, with rationale
-and the bare minimal needed deetail.
 
 Text rasterization is what ended up being the bulk of the work,
 and this report will focus on the trade-off between the two best approaches i could find,
 and modifications i made to suit the goals of the project.
+I have read everything i could possibly dig up on hardware-accelerated text rasterization
+on the internet, and as far as I can tell, the approaches outlined here are de facto
+state of the art when it comes to scale-independent text rendering.
 
 A last point worth mentioning briefly is performance.
 The goals of the project is first and foremost _correctness above all_, at the
@@ -645,7 +646,94 @@ Moreover, we only need to retesselate when the control points change, so in many
 the time spent retesselating will be extremely minimal.
 
 # Future work
-- 3d plotting
-- tex parser
-- wgpu, vulkan, webGL. safe gpu abstraction.
-- lua api
+In its current form, the library is technically able to render most necessary graphical primitives
+needed for mathematical visualization, albeit with a very cumbersome API that is only accessible from
+Rust.
+There are many avenues that are worth exploring, and I want to outline some ideas for future work.
+
+## Plotting
+A lot of things that are interesting to visualize is three-dimensional.
+One of the biggest pain points with `matplotlib` from my own work, is that making animations
+of solutions to partial differential equations is -- for lack of a better term --
+a massive pain in the ass.
+I didn't explore 3D plotting much in the work so far, because quite frankly it should be
+mostly trivial with OpenGL: The tesselation of a plane into triangles is obvious, and
+a 3D mesh $z = f(x, y; t)$ is just about the easiest thing you could possibly render with
+the graphics pipeline.
+On the other hand, more interesting visualizations than a simple mesh is a very interesting
+idea to explore. Techniques for presenting data that is hard for humans to perceive,
+such as data with high numbers of dimensions, are very much non-trivial.
+
+## \TeX\ Typesetting
+The typesetting capabilities of the demo is intentionally lackluster.
+There are a lot of other projects that support \TeX-like typesetting, and I find it hard
+to believe that none of this will be reusable.
+It is most desirable to find a good \TeX\ parser that can be embedded in rust, and implement
+a way to compile this into a scene-graph, but alternatives is worth exploring.
+
+[Manim](https://github.com/ManimCommunity/manim) does this by simply invoking the platforms
+\LaTeX\ compiler with `os.system` in Python to compile a `.dvi` file, which it then converts
+to SVG with `dvisvgm`.
+This forces the user to have \LaTeX\ and `dvisvgm` insalled, but these are both part of
+`texlive`, so frankly this is not a problem (maybe on Windows).
+A bigger problem is that this _essentially_ makes it impossible to animate the content
+of typeset text, I don't believe invoking a separate process with \LaTeX\ is something
+we can realistically do per-frame in real time, but as a one-time thing done during initialization,
+this will work great.
+
+I played around with `dvisvgm` for a few minutes, and the document
+```Tex
+\documentclass[crop]{standalone}
+\begin{document}
+$\displaystyle
+\hat f(\omega) =
+    \int\displaylimits_{t =-\infty}
+                      ^{t = \infty}
+    \mathrm{d}t f(t)
+        \exp(-2 \pi i t \omega)
+$
+\end{document}
+```
+indeed compiles into a simple `.svg` file with just some defined Bézier paths drawn at specific
+coordinates.
+
+\begin{figure}[h]
+\begin{center}
+\includegraphics[width=0.625\columnwidth]{report/dvisvg_test.png}
+\caption{A \LaTeX\ document compiled using \texttt{latex} and \texttt{dvisvgm ---no-fonts=1}, as shown in
+Inkscape.}
+\end{center}
+\end{figure}
+
+So there is essentially two good approaches:
+We can support parsing a subset of SVG to accomodate the output of `dvisvgm`
+into our existing glyph rasterization,
+or we could look for a library that rasterizes SVGs.
+Parsing the SVG into our current glyph rasterization primitives means the
+anti-aliasing is guaranteed to be 100% consistent, and performance is guaranteed
+to be consistent. On the other hand, this is a lot of work for extremely minimal gain
+if there is some library that can be leveraged to do this on the GPU.
+
+## Graphics Backend
+Currently the project uses OpenGL as its graphics backend, as this was a formal requirement
+of the project.
+This is limiting because first of all, OpenGL is poorly supported on some platforms (MacOS),
+and while everything I do _at the moment_ works, there are a lot of things that are easier with
+modern graphics APIs (SSBOs for example).
+OpenGL it restricts the rendering to native applications, and it would be fun to try to
+target web browsers as well.
+There are a lot of interesting work in this department in the Rust community.
+I would like to re-implement the project on top of [`wgpu`](https://github.com/gfx-rs/wgpu) to
+support `wasm`/WebGPU and Vulkan.
+
+## Scripting
+Currently, doing any form of complex animation is pretty hard, because the Rust-API to the
+library is extremely verbose, something which is a common grievance with Rust.
+Glutin provides a way to send events to the event loop from separate threads, a so-called
+event loop proxy, which we could use on a separate thread running a Lua-interpreter to
+enable constructing animation in a language that is terse and easy to use.
+
+I think this will actually be extremely easy, as there are libraries that does this embedding,
+and we just need to write a simple interface exposed inside the Lua environment.
+Of course, easy does not mean quick to do, and since this is completely orthogonal to graphics
+programming, I haven't explored this yet.

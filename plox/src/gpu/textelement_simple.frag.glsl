@@ -18,5 +18,5 @@ void main() {
     }
     alpha /= 16.0;
 
-    color = vec4(0, 0, 0, alpha);
+    color = vec4(0, 0, 0, clamp(alpha, 0.1, 1.0));
 }

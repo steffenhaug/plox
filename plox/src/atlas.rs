@@ -11,6 +11,7 @@ pub struct Atlas<'a> {
     pub face: &'a Face<'a>,
 }
 
+#[derive(Debug)]
 pub struct Outline {
     pub ctrl_pts: Vec<(f32, f32)>,
     pub bbox: Rect,
@@ -61,7 +62,7 @@ impl<'a> Atlas<'a> {
         // this is a bit ugly atm. needs rework.
         let glyphs = crate::shaping::shape(text, self.face);
 
-        let mut vertices: Vec<(f32, f32)> = Vec::with_capacity(10_000);
+        let mut vertices: Vec<(f32, f32)> = Vec::with_capacity(100);
 
         let mut y0 = f32::INFINITY;
         let mut y1 = -f32::INFINITY;

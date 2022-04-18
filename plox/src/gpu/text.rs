@@ -214,7 +214,12 @@ impl TextElement {
 
     /// Sets up all the buffers to prepare for pushing data.
     pub unsafe fn new(input: &str, atlas: &Atlas) -> Self {
-        let Outline { ctrl_pts, bbox } = atlas.outline(input);
+        let outline = atlas.outline(input);
+        Self::outlined(outline)
+    }
+
+    pub unsafe fn outlined(input: Outline) -> Self {
+        let Outline { ctrl_pts, bbox } = input;
 
         let vao = Vao::<1>::gen();
         vao.enable_attrib_arrays();

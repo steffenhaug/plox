@@ -317,22 +317,40 @@ impl<'a> State<'a> {
         ecs.push(
             Thing::new()
                 .typeset_text(Typeset::elem(fps.clone()))
-                .translate(vec2(10.0, 10.0))
+                .translate(vec2(10.0, 20.0))
                 .scale(40.0),
         );
 
-        // Typeset a test integral.
-        let lim1 = Typeset::text("Ω", &atlas);
-        let sum = Typeset::integral(Some(lim1), None, &atlas);
-        let body = Typeset::text("\u{1D453}(\u{1D465})d\u{1D707}(\u{1D465})", &atlas);
-        let int = Typeset::seq(vec![sum, body]);
+        // SVG test.
+        let outline = plox::svg::parse(plox::svg::RUST_LOGO_SVG_SRC);
+        let svg = TextElement::outlined(outline);
+        ecs.push(Thing::new()
+                 .scale(150.0)
+                 .translate(vec2(10.0, 60.0))
+                 .typeset_text(Typeset::elem(Arc::new(RwLock::new(svg)))));
+
         ecs.push(
             Thing::new()
-                .typeset_text(int)
-                .text_shader(Shader::fancy_blit().into())
-                .translate(vec2(25.0, 700.0))
-                .scale(90.0),
+                .typeset_text(Typeset::elem(Arc::new(RwLock::new(TextElement::new("SVG:", &atlas)))))
+                .translate(vec2(10.0, 220.0))
+                .scale(40.0),
         );
+
+        let outline = plox::svg::parse(plox::svg::MAXWELL_SVG_SRC);
+        let svg = TextElement::outlined(outline);
+        ecs.push(Thing::new()
+                 .scale(150.0)
+                 .translate(vec2(10.0, 260.0))
+                 .text_shader(Shader::fancy_blit().into())
+                 .typeset_text(Typeset::elem(Arc::new(RwLock::new(svg)))));
+
+        let outline = plox::svg::parse(plox::svg::FT_SVG_SRC);
+        let svg = TextElement::outlined(outline);
+        ecs.push(Thing::new()
+                 .scale(350.0)
+                 .translate(vec2(10.0, 425.0))
+                 .typeset_text(Typeset::elem(Arc::new(RwLock::new(svg)))));
+
 
         // The initial position of the Bézier (to provide some defaults).
         let bezier = Cubic::pts(
@@ -435,6 +453,7 @@ impl<'a> State<'a> {
                 }),
         );
 
+
         ecs.push(
             Thing::new()
                 .circle(CircleElement::new(10.0).width(2.0))
@@ -443,6 +462,7 @@ impl<'a> State<'a> {
                 })
                 .circle_shader(Shader::fancy_circle().into()),
         );
+
 
         State {
             win_dims: (SCREEN_W, SCREEN_H),
