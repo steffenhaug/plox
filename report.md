@@ -147,6 +147,14 @@ in applications that need to draw graphics.
 The name is a combination of the words "plot" and "oxide" because every
 Rust projects apparently needs to have a silly name.
 
+**A final note:** A lot of "filesystem resources", such as font files, shader source code,
+and SVG code that would normaly be compiled with the systems \LaTeX\ compiler is _hard coded_
+or otherwise included in the binary with `include_str!` or `include_bytes!` to make it _absolutely certain_
+that it works on any system for when the course staff is evaluating the code.
+I want to make it clear (although it is probably obvious) that the _graphical system_ can use
+any `.ttf` of `.otf` font, and typeset arbitrary \LaTeX\ assuming these resources were available
+on the system, but I dare not make such assumptions.
+
 # Text rasterization
 Computer fonts are designed as splines of Bézier curves.
 This is useful for designers, because Bézier curves can produce very beautiful
@@ -159,6 +167,10 @@ this makes processing them significantly more complicated, but it allows creatin
 more detailed curves with fewer spline segments.
 `.otf`-fonts can be converted to `.ttf` with a tool like FontForge, which allows
 us to render any common font while only dealing with the simplest case.
+I currently approximate cubics with three quadratics just to support all types of
+strokes, so the project _can_ use `.otf` fonts, but the approximation is lossy especially
+for extremely bendy cubics, and thus using FontForge to convert yields a more consistent
+result if detail is very important.
 
 Traditionally, text is rasterized in software into a texture atlas which applications
 can sample to render text extremely efficiently after the initial setup.
@@ -189,26 +201,26 @@ That sounds complicated, mostly because it is.
 GPUs are not designed to do this.
 But there are some theorems about curves and winding numbers that help us do it
 pretty well.
-The theory is, again, outlined in more detail in the diary (with examples and problems).
+The theory is, again, outlined in more detail in the diary (with examples and challenges).
 
 ## Winding number in fragment shader
 The first approach generaly utilizes the fact that a the winding number
 of a fragment can be calculated by counting the intersections of the spline
 with a ray eminating from the point in any direction.
 I will not attempt prove this, but the result is useful because finding the
-intersections of the spline with a ray amounts to solving a quadratic or a
-cubic equation, which have explicit formulas.
+intersections of the spline with a ray amounts to solving a sequence of quadratic or a
+cubic equations, which have explicit formulas.
 The formula for the cubic is quite complicated, and dealing with the
 number of ways the three potential roots can be placed with respect to the
-ray makes it a lot more feasible to simply deal with quadratics, which means
-limiting our font selection to `.ttf` fonts.
-In this case, there is an algorithm
+ray makes it a lot more feasible to simply deal with quadratics, which is why
+my font loader approximates the cubics using quadratics.
+In this simple case, there is an algorithm
 [by Eric Lengyel](https://jcgt.org/published/0006/02/02/paper.pdf)
 that uses a heuristic approach to classify curves based on which
 solutions we need to use, which eliminates all numerical error, and
 gives a robust rasterization.
-An approach using cubics directly is outlined in the diary, but is essentially 
-useless because of numerical error.
+An approach using cubics directly is outlined and implemented in the diary, 
+but is essentially useless because of numerical error.
 
 Lengyels algorithm has one especially nice property:
 In its simplest form, there is only one quad per character.
@@ -219,7 +231,7 @@ The FontForge-converted version of Computer Modern -- the default \LaTeX\ font -
 is only a font of modest complexity, but the $\alpha$-glyph still contains
 41 quadratic curves, which means that assuming 16xMSAA we need to solve
 almost 700 polynomials _per fragment_.
-This is mostly fine, since the number of fragments actually processed is
+This is mostly fine, since the number of fragments processed is
 effectively bounded by the resolution, but still it means that the time to draw
 a frame can be drastically impacted by scaling a text element.
 
@@ -270,23 +282,23 @@ The resulting pixel only lies inside the outline if the accumulated color scaled
 \end{displayquote}
 Now, clearly this has problems (as Wallace himself describes) in the sense that there is a
 limit on how many times an outline can overlap itself.
-In practice, this isn't much of a problem of course, but its an ugly wart on an otherwise beautiful
-method.
-Wallace mentions flipping the stencil buffer instead, and this is how similar
-techniques have been described in the litterature in the past
-[](http://www.glprogramming.com/red/chapter14.html#name13).
-This would solve this problem, but is quite a lot of work to do so:
+In practice, this isn't much of a problem for simple text of course, but its an ugly wart on an otherwise beautiful
+method, and would prevent rasterizing shapes defined by more complex outlines.
+Wallace mentions flipping the stencil buffer instead of additive blending, and this is how similar
+techniques have been described
+[in the past](http://www.glprogramming.com/red/chapter14.html#name13).
+This would solve the problem, but is quite a lot of work to do so:
 Clearing the stencil buffer, enabling and disabling stencil testing, rendering
 a quad to cover it afterwards, and so on.
 And if we do this, we still haven't thought about anti-aliasing.
-But it turns out there is an easy way to do this,
-and as far as i know, this is my original idea, although it is such a trivial
+But it turns out there is an easier way to achieve this.
+As far as I know, this is my original idea, although it is such a trivial
 extension of Wallaces idea that it barely counts as an idea.
 
 We don't _have to_ add up all the draw calls and calculate $w \pmod 2$ in the end.
 We can simply do all the arithmetic modulo two from the get-go.
 How do we do this?
-By exploting the fact that addition in the additive group $G = (\{0, 1\}, +)$ has the same
+By exploting the fact that addition in the additive group $(G = \{0, 1\}, +)$ has the same identical
 addition table as the truth table for logical XOR.
 That's just what people on the top floor of the ivory tower say to say that $1 + 1 = 0$.
 
@@ -342,7 +354,7 @@ This is clearly a big waste.
 
 My solution is to rasterize the text to a separate texture first.
 In theory we can use a multisampled texture, but support for and implementation of
-these (as i discovered the hard way) vary wildly across platforms, so we won't get 
+these (as i discovered the hard way) vary wildly across hardware, so we won't get 
 consistent results.
 A more robust approach is to use a normal texture, and rasterize at 16x resolution
 and sample a $4 \times 4$ area of 16 texels in the fragment shader.
@@ -437,13 +449,41 @@ Do note how much more closely the non-hinted version of $\alpha$ resembles the o
 All in all, I don't think I'm doing so bad in comparison to FreeType.
 
 Subpixel rendering would be a nice goal, but since it relies on basically exploiting the physical layout of
-a pixel on the screen, and _coloring_ a pixel to light up a speficif fraction of it, this introduces assumptions
+a pixel on the screen, and _coloring_ a pixel to light up a speficic fraction of it, this introduces assumptions
 about the users monitor. Personally, I have one monitor which is rotated vertically, and one which is not,
 so subpixel rendering _just doesnt work_. If i moved a window between monitors, the text would look horrible.
 Furthermore, this is just not necessary on modern high resolution displays.
 
+# SVG Rasterization
+The same algorithm can of course fill _any_ Bézier path, not just ones loaded from computer fonts.
+SVG paths is one case where the \sfrac{1}{255} limit of Wallaces implementation could become problematic
+very quickly, but since we took extra care in handling this, we won't have any problems in this department.
+Of course, implementing the entire SVG spec is a herculean task, and I have no plans to undertake that.
+But we can get quite far by _just_ implementing one single feature: Paths.
+
+Paths in SVGs are defined as a sequence of Bézier curves, exactly identically to how computer fonts are specified.
+And a lot of SVGs are just filled contours outlined by paths.
+By using one of Rusts many libraries for SVG parsing, `usvg`, extracting the `path`-commands from an SVG
+is pretty easy.
+Of course, this means that if we submit an SVG with other elements, such as gradients, fills, or even text,
+these will just be ignored.
+
+\begin{figure}[h]
+\begin{center}
+\includegraphics[width=1.0\columnwidth]{report/svg_test.png}
+\end{center}
+\caption{The Rust programming language logo rasterized from a SVG file. Anti-aliasig and
+custom fragment shading simply works.}
+\label{fig:evince}
+\end{figure}
+
+Of course, simply ripping the Paths from an SVG and filling the contained set with our own fragment shader
+is an _incorrect_ implementation of the SVG spec, so this could be argued is abuse of the SVG format.
+On the other hand, this is a _very_ easy way to get Bézier contours from a common file format that a lot
+of other systems can generate -- more on this later.
+
 # Typesetting
-The typesetting included in the library is mostly a proof of concept.
+The typesetting outlined in the diary is mostly a proof of concept.
 The main idea is to construct a scene graph of text elements that
 allows us to stack text elements vertically and horizontally, and
 adjust the kerning as needed.
@@ -473,16 +513,64 @@ to put limits above and below the integral symbol, and boxes are stacked horizon
 with kerning rules respected to place the integral boxes next to the integrand.
 
 Now, _just_ this is obviously woefully inadequate.
-But I want to leave it here, because I'm not interested in making
-a new parser for \LaTeX\ from scratch. I'm sure that some usable parser
-exists that can construct all these boxes and offsets _correctly_
-instead of me hacking it together with some random constants that look
-"close enough".
-I don't consider this worth spending time on beyond proving that using a
-scene graph works great.
-If you want to animate part of a typeset expression, for example,
-you can animate its transform in the graph, and the graph will make animations
-stack "correctly".
+Implementing all of the \LaTeX\ layout rules is not a job for one person. 
+The idea of parsing mathematical expressions into a scene graph has merit because it allows
+animating _parts_ of the expression individually, for example nudging integral limits a bit
+if we want to direct attention to them in the visualization.
+There is simply no way to implement something like this that supports even a "good enough"
+subset of \LaTeX\ to not be annoying to use.
+For that reason, it is sensible to restrict the requirements a bit.
+If we let go of the desire for a scene graph, we can compile a \LaTeX-document to
+SVG paths by passing the resulting `.dvi` file through the conversion tool `dvisvgm`!
+
+I played around with `dvisvgm` for a few minutes, and the document
+```Tex
+\documentclass[crop]{standalone}
+\begin{document}
+$\displaystyle
+\hat f(\omega) =
+    \int\displaylimits_{t =-\infty}
+                      ^{t = \infty}
+    \mathrm{d}t f(t)
+        \exp(-2 \pi i t \omega)
+$
+\end{document}
+```
+indeed compiles into a simple `.svg` file with just some defined Bézier paths drawn at specific
+coordinates.
+
+\begin{figure}[h]
+\begin{center}
+\includegraphics[width=0.625\columnwidth]{report/dvisvg_test.png}
+\caption{A \LaTeX\ document compiled using \texttt{latex} and \texttt{dvisvgm ---no-fonts=1}, as shown in
+Inkscape.}
+\end{center}
+\end{figure}
+
+And this is precisely how [Manim](https://github.com/ManimCommunity/manim) does \TeX\ typesetting.
+They simply shell out to the systems \LaTeX\ compiler with `os.system` in Python to compile a `.dvi` file, 
+which it then converts to SVG by shelling out to `dvisvgm`.
+This forces the user to have \LaTeX\ and `dvisvgm` insalled, but these are both part of
+`texlive`, so frankly this is not a problem (maybe on Windows).
+A bigger problem is that this _essentially_ makes it impossible to animate the content
+of typeset text.
+I don't believe invoking a separate process with \LaTeX\ is something
+we can realistically do per-frame in real time, but as a one-time thing done during initialization,
+this will work great.
+
+\begin{figure}[h]
+\begin{center}
+\includegraphics[width=0.625\columnwidth]{report/maxwell.png}
+\caption{Maxwells equations as rasterized as SVG compiled from \LaTeX.}
+\end{center}
+\end{figure}
+
+Note: In the projects demo, the SVG code for these expressions have been manually compiled using
+`latex` and `dvisvgm` and bundled with the binary, firstly in case these programs are not available on the computers when the
+course staff is evaluating the project, and secondly because I don't know if this would work on
+Windows. Obviously, shelling out and writing to temporary files is mostly a trivial task apart from these challenges,
+and I hope it is clear that _the graphics system_ can easily render arbitrary \LaTeX\ on a system that has `texlive`
+installed, I just don't want to rely on shelling out to other programs for the evaluation.
 
 
 # Geometrical primitives
@@ -575,8 +663,8 @@ $$
 will cover the line, but this simple approach has some big problems.
 First of all, when drawing lines that are connecting on an angle, the joint will have
 "corners sticking out".
-Secondly, if draw with transparency, the joint would have overlapping fragments where
-the color would be off. This can _not_ be fixed by depth testng, because if the
+Secondly, if drawn with transparency, the joint would have overlapping fragments where
+the color would be off because a fragment is shaded twice. This can _not_ be fixed by depth testng, because if the
 line sequence has a self-intersection (a loop) it is _correct_ to draw twice.
 
 We need to offset the vertices at the joint based on the width $w$ and the angle
@@ -609,11 +697,13 @@ well-behaved even approaching the limit case.
 
 One thing we can achieve using the texture coordinates, is the effect of a dashed line.
 Simply zero the alpha periodically along the axis parallell to the curve.
-There is of course no limit to the things a fragment shader can do:
+There is of course no limit to the things a fragment shader can do,
+for example, using a fragment shader that computes the Mandelbrot set, we can put
+a mandelbrot set visualization directly on a tesselated spline.
+Obviously, this is silly, but the point is to prove that any visual effect is achievable.
 
 ![A shaded curve tesselation with the Mandelbrot set visualized on top.](report/cursed_curved_mandelbrot.png)
 
-Of course this is a bit goofy, and doesn't look good at all, but it proves the point.
 
 ## Tesselated parametric curves
 The techniques used to fill in the outlines of character glyhps can technically
@@ -639,11 +729,18 @@ from the correct line.
 Of course, this will lead to a lot of wasted tesselation in the "straight" parts of a curve,
 but simplicity is often a performance win since complex "optimal" solutions often lose out
 because of overhead and constant factors on small problem sizes, and if we can get away
-with only breaking a curve into a few hundred segments, this is likely to be the case,
+with only breaking a curve into, say, a few hundred segments, this is likely to be the case,
 so there is no point going all out prematurely before we know that the brutal approach
 is too slow, and before we have a running demo to profile for improvements.
 Moreover, we only need to retesselate when the control points change, so in many applications
 the time spent retesselating will be extremely minimal.
+
+\begin{figure}[h]
+\begin{center}
+\includegraphics[width=0.625\columnwidth]{report/bezier_example.png}
+\caption{A cubic Bézier curve tesselated into a linear spline.}
+\end{center}
+\end{figure}
 
 # Future work
 In its current form, the library is technically able to render most necessary graphical primitives
@@ -663,56 +760,6 @@ the graphics pipeline.
 On the other hand, more interesting visualizations than a simple mesh is a very interesting
 idea to explore. Techniques for presenting data that is hard for humans to perceive,
 such as data with high numbers of dimensions, are very much non-trivial.
-
-## \TeX\ Typesetting
-The typesetting capabilities of the demo is intentionally lackluster.
-There are a lot of other projects that support \TeX-like typesetting, and I find it hard
-to believe that none of this will be reusable.
-It is most desirable to find a good \TeX\ parser that can be embedded in rust, and implement
-a way to compile this into a scene-graph, but alternatives is worth exploring.
-
-[Manim](https://github.com/ManimCommunity/manim) does this by simply invoking the platforms
-\LaTeX\ compiler with `os.system` in Python to compile a `.dvi` file, which it then converts
-to SVG with `dvisvgm`.
-This forces the user to have \LaTeX\ and `dvisvgm` insalled, but these are both part of
-`texlive`, so frankly this is not a problem (maybe on Windows).
-A bigger problem is that this _essentially_ makes it impossible to animate the content
-of typeset text, I don't believe invoking a separate process with \LaTeX\ is something
-we can realistically do per-frame in real time, but as a one-time thing done during initialization,
-this will work great.
-
-I played around with `dvisvgm` for a few minutes, and the document
-```Tex
-\documentclass[crop]{standalone}
-\begin{document}
-$\displaystyle
-\hat f(\omega) =
-    \int\displaylimits_{t =-\infty}
-                      ^{t = \infty}
-    \mathrm{d}t f(t)
-        \exp(-2 \pi i t \omega)
-$
-\end{document}
-```
-indeed compiles into a simple `.svg` file with just some defined Bézier paths drawn at specific
-coordinates.
-
-\begin{figure}[h]
-\begin{center}
-\includegraphics[width=0.625\columnwidth]{report/dvisvg_test.png}
-\caption{A \LaTeX\ document compiled using \texttt{latex} and \texttt{dvisvgm ---no-fonts=1}, as shown in
-Inkscape.}
-\end{center}
-\end{figure}
-
-So there is essentially two good approaches:
-We can support parsing a subset of SVG to accomodate the output of `dvisvgm`
-into our existing glyph rasterization,
-or we could look for a library that rasterizes SVGs.
-Parsing the SVG into our current glyph rasterization primitives means the
-anti-aliasing is guaranteed to be 100% consistent, and performance is guaranteed
-to be consistent. On the other hand, this is a lot of work for extremely minimal gain
-if there is some library that can be leveraged to do this on the GPU.
 
 ## Graphics Backend
 Currently the project uses OpenGL as its graphics backend, as this was a formal requirement

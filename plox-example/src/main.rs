@@ -28,7 +28,7 @@ type Mutable<T> = Arc<RwLock<T>>;
 
 /// Contains everything that is used to feed data to the GPU.
 pub struct State<'a> {
-    atlas: Atlas<'a>,
+    atlas: Arc<Atlas<'a>>,
     win_dims: (u32, u32),
     mouse: Mutable<(f32, f32)>,
     fps: Mutable<TextElement>,
@@ -299,7 +299,7 @@ impl<'a> State<'a> {
         let circle_renderer = CircleRenderer::new();
         let line_renderer = LineRenderer::new();
 
-        let atlas = Atlas::new(&font::LM_MATH);
+        let atlas = Arc::new(Atlas::new(&font::LM_MATH));
         let default_text_shader = Shader::simple_blit();
 
         // Shared mouse position
@@ -324,33 +324,41 @@ impl<'a> State<'a> {
         // SVG test.
         let outline = plox::svg::parse(plox::svg::RUST_LOGO_SVG_SRC);
         let svg = TextElement::outlined(outline);
-        ecs.push(Thing::new()
-                 .scale(150.0)
-                 .translate(vec2(10.0, 60.0))
-                 .typeset_text(Typeset::elem(Arc::new(RwLock::new(svg)))));
+        ecs.push(
+            Thing::new()
+                .scale(150.0)
+                .translate(vec2(10.0, 60.0))
+                .text_shader(Shader::fancy_blit().into())
+                .typeset_text(Typeset::elem(Arc::new(RwLock::new(svg)))),
+        );
 
         ecs.push(
             Thing::new()
-                .typeset_text(Typeset::elem(Arc::new(RwLock::new(TextElement::new("SVG:", &atlas)))))
+                .typeset_text(Typeset::elem(Arc::new(RwLock::new(TextElement::new(
+                    "SVG:", &atlas,
+                )))))
                 .translate(vec2(10.0, 220.0))
                 .scale(40.0),
         );
 
         let outline = plox::svg::parse(plox::svg::MAXWELL_SVG_SRC);
         let svg = TextElement::outlined(outline);
-        ecs.push(Thing::new()
-                 .scale(150.0)
-                 .translate(vec2(10.0, 260.0))
-                 .text_shader(Shader::fancy_blit().into())
-                 .typeset_text(Typeset::elem(Arc::new(RwLock::new(svg)))));
+        ecs.push(
+            Thing::new()
+                .scale(150.0)
+                .translate(vec2(10.0, 260.0))
+                .text_shader(Shader::fancy_blit().into())
+                .typeset_text(Typeset::elem(Arc::new(RwLock::new(svg)))),
+        );
 
         let outline = plox::svg::parse(plox::svg::FT_SVG_SRC);
         let svg = TextElement::outlined(outline);
-        ecs.push(Thing::new()
-                 .scale(350.0)
-                 .translate(vec2(10.0, 425.0))
-                 .typeset_text(Typeset::elem(Arc::new(RwLock::new(svg)))));
-
+        ecs.push(
+            Thing::new()
+                .scale(350.0)
+                .translate(vec2(10.0, 425.0))
+                .typeset_text(Typeset::elem(Arc::new(RwLock::new(svg)))),
+        );
 
         // The initial position of the Bézier (to provide some defaults).
         let bezier = Cubic::pts(
@@ -453,16 +461,35 @@ impl<'a> State<'a> {
                 }),
         );
 
-
         ecs.push(
             Thing::new()
-                .circle(CircleElement::new(10.0).width(2.0))
+                .circle(CircleElement::new(5.0).width(2.0))
                 .animation(move |thing, ecs| {
                     thing.translation_component.replace(ecs.pos_of(p3));
-                })
-                .circle_shader(Shader::fancy_circle().into()),
+                }),
         );
 
+        let label = Arc::new(RwLock::new(TextElement::new("\u{1D709}", &atlas)));
+        let a_label = label.clone();
+        let a_atlas = atlas.clone();
+        ecs.push(
+            Thing::new()
+                .typeset_text(Typeset::elem(label))
+                .scale(20.0)
+                .animation(move |thing, ecs| {
+                    let trans = ecs.pos_of(p3) + vec2(10.0, 10.0);
+                    thing.translation_component.replace(trans);
+
+                    let scale = f32::max(glm::length(&ecs.pos_of(p3)) / 10.0, 25.0);
+                    thing.scale_component.replace(scale);
+
+                    // Update the points label text via the Arc.
+                    a_label.write().unwrap().update(
+                        &format!("\u{1D709} = ({}, {})", ecs.pos_of(p3).x, ecs.pos_of(p3).y),
+                        &a_atlas,
+                    );
+                }),
+        );
 
         State {
             win_dims: (SCREEN_W, SCREEN_H),
