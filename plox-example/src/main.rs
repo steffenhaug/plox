@@ -469,7 +469,7 @@ impl<'a> State<'a> {
                 }),
         );
 
-        let label = Arc::new(RwLock::new(TextElement::new("\u{1D709}", &atlas)));
+        let label = Arc::new(RwLock::new(TextElement::new("", &atlas)));
         let a_label = label.clone();
         let a_atlas = atlas.clone();
         ecs.push(
@@ -485,7 +485,7 @@ impl<'a> State<'a> {
 
                     // Update the points label text via the Arc.
                     a_label.write().unwrap().update(
-                        &format!("\u{1D709} = ({}, {})", ecs.pos_of(p3).x, ecs.pos_of(p3).y),
+                        &format!("\u{1D701} = ({}, {})", ecs.pos_of(p3).x, ecs.pos_of(p3).y),
                         &a_atlas,
                     );
                 }),
